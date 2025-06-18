@@ -1,0 +1,60 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - depguard
+    - errcheck
+    - goconst
+    - gocyclo
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+          allow:
+            - $gostd
+            - github.com/oasisprotocol/rofl-app-backend
+            - github.com/go-chi/chi/v5
+            - github.com/go-chi/cors
+            - github.com/go-chi/httplog/v3
+            - github.com/golang-jwt/jwt/v5
+            - github.com/hibiken/asynq
+            - github.com/knadh/koanf
+            - github.com/redis/go-redis/v9
+            - github.com/spf13/cobra
+            - github.com/spruceid/siwe-go
+            - cloud.google.com/go/storage
+            - google.golang.org/api/option
+          deny:
+            - pkg: "github.com/pkg/errors"
+              desc: Should be replaced by standard lib errors package
+    gosec:
+      excludes:
+        - G402
+        - G404
+        - G115
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/oasisprotocol/rofl-app-backend
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

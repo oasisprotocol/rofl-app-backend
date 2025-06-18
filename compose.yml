@@ -1,0 +1,43 @@
+name: rofl-app-backend
+
+services:
+  example-frontend:
+    build:
+      context: frontend_test/
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - ./docker/config.yml:/app/config.yml:ro
+    command: ["--config", "/app/config.yml"]
+    ports:
+      - "127.0.0.1:8899:8899"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  fakegcs:
+      image: fsouza/fake-gcs-server:latest
+      ports:
+        - "127.0.0.1:4443:4443"
+      entrypoint:
+        - /bin/sh
+        - -c
+        - |
+          # Initialize the bucket that's expected by the app.
+          mkdir -p /data/rofl-app-backend && \
+            exec /bin/fake-gcs-server \
+              -scheme=http \
+              -host=0.0.0.0 \
+              -port=4443 \
+              -public-host=fakegcs:4443 \
+              -data=/data
