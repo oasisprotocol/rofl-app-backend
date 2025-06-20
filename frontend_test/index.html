@@ -1,0 +1,52 @@
+<body>
+  <!-- SIWE Login test. -->
+  <h1>SIWE Vite Test</h1>
+  <button id="login">Sign In with Ethereum</button>
+  <button id="logout" style="display: none;">Logout</button>
+  <pre id="output"></pre>
+
+  <hr />
+
+  <!-- Artifacts test. -->
+  <h2>Artifacts Test (Login required)</h2>
+  <input type="text" id="artifact-id" placeholder="Artifact ID" />
+  <input type="file" id="artifact-file" />
+  <button id="upload-artifact">Upload</button>
+  <button id="download-artifact">Download</button>
+  <pre id="artifact-output"></pre>
+
+  <style>
+    #spinner {
+      display: none;
+      font-size: 1.2rem;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+  </style>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+<hr />
+
+<!-- ROFL Build test. -->
+<h2>ROFL Build Test (Login required)</h2>
+<label>rofl.yaml:</label>
+<input type="file" id="rofl-manifest" accept=".yaml,.yml" /><br />
+<label>compose.yaml:</label>
+<input type="file" id="compose-file" accept=".yaml,.yml" /><br />
+<button id="start-build">Start Build</button>
+<pre id="build-output"></pre>
+<div id="spinner">⏳ Building...</div>

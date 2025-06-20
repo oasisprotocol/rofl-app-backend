@@ -4,6 +4,18 @@ A backend for [ROFL App], a web-based dashboard application for creating,
 exploring, monitoring and interacting with Oasis ROFL (Runtime Offchain Logic)
 apps.
 
+## Usage
+
+To run the local development environment using Docker Compose:
+
+```bash
+make start
+```
+
+- A simple test frontend is available at: http://localhost:3000
+
+- Backend available at: http://localhost:8899
+
 ## Features
 
 - Store ROFL App artifacts (template data, `rofl.yaml`, `compose.yaml`).
