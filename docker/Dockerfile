@@ -2,9 +2,8 @@
 FROM golang:1.24-bookworm AS builder
 WORKDIR /app
 
-# ARG OASIS_CLI_VERSION=0.13.4
-# TODO: switch back to released version once 0.13.5 is released.
-ARG OASIS_CLI_BRANCH=master
+ARG OASIS_CLI_VERSION=0.14.0
+# ARG OASIS_CLI_BRANCH=master
 
 # Download or build oasis CLI.
 RUN if [ "x${OASIS_CLI_BRANCH}" != "x" ]; then \
