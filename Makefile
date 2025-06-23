@@ -24,7 +24,7 @@ docker-build:
 		--file Dockerfile \
 		.
 start:
-	COMPOSE_BAKE=true docker compose up --build -d
+	docker compose up --build -d
 
 stop:
 	docker compose down -v -t 0
