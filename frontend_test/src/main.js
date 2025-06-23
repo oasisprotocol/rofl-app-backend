@@ -154,9 +154,8 @@ buildBtn.onclick = async () => {
     return;
   }
 
-  const manifestBuf = await manifestFile.arrayBuffer();
-  const composeBuf = await composeFile.arrayBuffer();
-
+  const manifestText = await manifestFile.text();
+  const composeText = await composeFile.text();
 
   const token = localStorage.getItem("jwt");
   const res = await fetch(`${backend}/rofl/build`, {
@@ -166,8 +165,8 @@ buildBtn.onclick = async () => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      manifest: Array.from(new Uint8Array(manifestBuf)),
-      compose: Array.from(new Uint8Array(composeBuf)),
+      manifest: manifestText,
+      compose: composeText,
     }),
   });
 
@@ -187,8 +186,12 @@ buildBtn.onclick = async () => {
       },
     });
 
-    if (statusRes.status === 404) {
+    if (statusRes.status === 202) {
       setTimeout(poll, 3000);
+      return;
+    }
+    if (statusRes.status === 404) {
+      buildOut.textContent = "Build not found";
       return;
     }
 

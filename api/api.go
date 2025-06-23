@@ -41,21 +41,19 @@ type Server struct {
 }
 
 // Run implements the Service interface.
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 	// Setup a redis client.
 	opts, err := redis.ParseURL(s.cfg.Redis.Endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid redis endpoint url: %w", err)
 	}
 	redisClient := redis.NewClient(opts)
-	defer func() {
-		_ = redisClient.Close()
-	}()
-
-	// Setup an asynq client.
 	asynqClient := asynq.NewClientFromRedisClient(redisClient)
+	asynqInspector := asynq.NewInspectorFromRedisClient(redisClient)
 	defer func() {
 		_ = asynqClient.Close()
+		_ = asynqInspector.Close()
+		_ = redisClient.Close()
 	}()
 
 	// Setup a GCS client (In production workload identity should be used, so no need to pass credentials).
@@ -112,7 +110,7 @@ func (s *Server) Run(ctx context.Context) error {
 		r.Get("/nonce", auth.NonceHandler(redisClient))
 		// Issues a short-lived JWT for the user (15mins).
 		// TODO: We should add a refresh token via secure cookie.
-		r.Post("/login", auth.SIWELoginHandler(redisClient, []byte(s.cfg.Auth.JWTSecret), s.cfg.Auth.SIWEDomain))
+		r.Post("/login", auth.SIWELoginHandler(redisClient, s.cfg.Auth))
 	})
 
 	// Authenticated routes.
@@ -207,9 +205,8 @@ func (s *Server) Run(ctx context.Context) error {
 		r.Route("/rofl", func(r chi.Router) {
 			r.Post("/build", func(w http.ResponseWriter, r *http.Request) {
 				type buildRequest struct {
-					// TODO: maybe we will accept a single file.
-					Manifest []byte `json:"manifest"`
-					Compose  []byte `json:"compose"`
+					Manifest string `json:"manifest"`
+					Compose  string `json:"compose"`
 				}
 				req, err := common.DecodeJSON[buildRequest](r)
 				if err != nil {
@@ -226,14 +223,14 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 
 				// Create a build task.
-				task, err := tasks.NewRoflBuildTask(addr, req.Manifest, req.Compose)
+				task, err := tasks.NewRoflBuildTask(addr, []byte(req.Manifest), []byte(req.Compose))
 				if err != nil {
 					slog.Error("failed to create build task", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
-				// TODO: could also ensure only one job per user, via a separate redis lock.
-				info, err := asynqClient.EnqueueContext(r.Context(), task, asynq.Unique(5*time.Minute), asynq.MaxRetry(0), asynq.Timeout(5*time.Minute), asynq.Retention(1*time.Hour), asynq.Queue(tasks.RoflBuildQueue))
+				// XXX: Could also require only one build per user at a time, via a separate redis lock.
+				info, err := asynqClient.EnqueueContext(r.Context(), task, tasks.RoflBuildOptions()...)
 				if err != nil {
 					if errors.Is(err, asynq.ErrDuplicateTask) {
 						common.WriteError(w, http.StatusConflict, "build already in progress")
@@ -264,7 +261,14 @@ func (s *Server) Run(ctx context.Context) error {
 				results, err := redisClient.Get(r.Context(), tasks.RoflBuildResultsKey(addr, taskID)).Result()
 				switch {
 				case errors.Is(err, redis.Nil):
-					http.NotFound(w, r)
+					// Check if task is in progress.
+					_, err := asynqInspector.GetTaskInfo(tasks.RoflBuildQueue, taskID)
+					if err != nil {
+						slog.Debug("failed to get build task info", "err", err)
+						common.WriteError(w, http.StatusNotFound, "task not found")
+						return
+					}
+					common.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "in_progress"})
 					return
 				case err != nil:
 					slog.Error("failed to get build task results", "err", err)

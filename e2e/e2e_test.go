@@ -76,9 +76,9 @@ func TestE2E(t *testing.T) {
 		require.NoError(err)
 		compose, err := testFiles.ReadFile("testdata/compose.yaml")
 		require.NoError(err)
-		payload := map[string][]byte{
-			"manifest": manifest,
-			"compose":  compose,
+		payload := map[string]string{
+			"manifest": string(manifest),
+			"compose":  string(compose),
 		}
 		buf := new(bytes.Buffer)
 		require.NoError(json.NewEncoder(buf).Encode(payload))
@@ -110,7 +110,7 @@ func TestE2E(t *testing.T) {
 
 			resp := doRequest(t, client, http.MethodGet, backendURL+"/rofl/build/"+buildRes.TaskID+"/results", &jwt, nil)
 			switch resp.StatusCode {
-			case http.StatusNotFound:
+			case http.StatusAccepted:
 				// Build is still running.
 				continue
 			case http.StatusOK:

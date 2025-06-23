@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -14,6 +15,26 @@ const RoflBuildTask = "rofl:build"
 
 // RoflBuildQueue is the name of the queue for the rofl build task.
 const RoflBuildQueue = "rofl_build"
+
+// RoflBuildOptions returns the default options for the rofl build task.
+func RoflBuildOptions() []asynq.Option {
+	return []asynq.Option{
+		// Task should be unique and complete within 10 minutes.
+		asynq.Timeout(10 * time.Minute),
+		asynq.Unique(10 * time.Minute),
+
+		// Task shouldn't be retried if it fails.
+		asynq.MaxRetry(0),
+
+		// Enqueue the task in the rofl build queue.
+		asynq.Queue(RoflBuildQueue),
+
+		// Retain the task results for 1 hour in redis.
+		// Note that this doesn't affect the Uniqness, a processed task can
+		// be re-queued regardless of the retention period.
+		asynq.Retention(1 * time.Hour),
+	}
+}
 
 // RoflBuildPayload is the payload of the rofl build task.
 type RoflBuildPayload struct {

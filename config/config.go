@@ -98,6 +98,14 @@ type AuthConfig struct {
 	// SIWEDomain is the domain of the SIWE authentication.
 	SIWEDomain string `koanf:"siwe_domain"`
 
+	// SIWEChainID is the chain ID of the SIWE authentication.
+	// If unset, chain ID is not checked.
+	SIWEChainID int `koanf:"siwe_chain_id"`
+
+	// SIWEVersion is the version of the SIWE authentication.
+	// If unset, version is not checked.
+	SIWEVersion string `koanf:"siwe_version"`
+
 	// JWTSecret is the secret for the JWT token generation.
 	JWTSecret string `koanf:"jwt_secret"`
 }
@@ -118,6 +126,9 @@ func (c *AuthConfig) Validate() error {
 
 // WorkerConfig is the configuration for the worker.
 type WorkerConfig struct {
+	// NumWorkers is the number of workers to run.
+	NumWorkers int `koanf:"num_workers"`
+
 	// Redis is the configuration for the Redis client.
 	Redis *RedisConfig `koanf:"redis"`
 
