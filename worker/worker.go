@@ -215,7 +215,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 
 	// Propagate the push command error if it failed.
 	if pushResult.Err != nil {
-		slog.Error("push command failed", "error", pushResult.Err)
+		slog.Error("push command failed", "error", pushResult.Err, "logs", pushResult.Logs)
 		result.Err = pushResult.Err.Error()
 		return result
 	}
