@@ -1,0 +1,77 @@
+# NOTE: This name appears in GitHub's Checks API and in workflow's status badge.
+name: ci-test
+
+# Trigger the workflow when:
+on:
+  # A push occurs to one of the matched branches.
+  push:
+    branches:
+      - master
+  # Or when a pull request event occurs for a pull request against one of the
+  # matched branches.
+  pull_request:
+    branches:
+      - master
+
+# Cancel in-progress jobs on same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Build Go
+        run: |
+          make build
+      - name: Test Go unit tests
+        run: |
+          make test-unit
+      - name: Ensure dependencies are tidied up
+        run: |
+          go mod tidy -v -x -compat=1.24  # goreleaser does the same; can find lingering issues
+          echo TIDY RESULTS START; git diff || true; echo TIDY RESULTS END
+      # - name: Upload to codecov.io
+      #   uses: codecov/codecov-action@v3.1.0
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     file: ./coverage.txt
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      # TODO: Cache docker build stuff.
+      - name: Build and start docker
+        run: |
+          make start
+      - name: Confirm containers
+        run: |
+          docker ps -a
+      - name: Test e2e
+        run: |
+          make test-e2e
+      - name: Dump logs and DB contents
+        run: |
+          docker compose logs | tee /tmp/docker-compose.log
+        if: success() || failure()  # but not if job is manually cancelled
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose.log
+          path: |
+            /tmp/docker-compose.log
+        if: success() || failure()  # but not if job is manually cancelled

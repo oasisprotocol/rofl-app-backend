@@ -18,6 +18,13 @@ linters:
     - staticcheck
     - unconvert
     - unused
+
+  exclusions:
+    rules:
+      - path: e2e/
+        linters:
+          - depguard
+
   settings:
     depguard:
       rules:
@@ -54,7 +61,3 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/oasisprotocol/rofl-app-backend
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
