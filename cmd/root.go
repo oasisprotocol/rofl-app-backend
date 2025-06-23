@@ -29,6 +29,9 @@ var (
 	}
 )
 
+// shutdownTimeout is the timeout for the services to shutdown.
+const shutdownTimeout = 15 * time.Second
+
 // Service is an interface that defines a that can be run.
 type Service interface {
 	// Run runs the service.
@@ -95,7 +98,7 @@ func rootMain(_ *cobra.Command, _ []string) {
 	select {
 	case <-done:
 		slog.Info("services shut down")
-	case <-time.After(10 * time.Second):
+	case <-time.After(shutdownTimeout):
 		slog.Error("services did not shutdown in time, forcing exit")
 		os.Exit(1)
 	}

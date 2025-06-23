@@ -18,7 +18,17 @@ import (
 	"github.com/oasisprotocol/rofl-app-backend/worker/oasiscli"
 )
 
-const defaultOasisCLIPath = "/usr/local/bin/oasis"
+const (
+	defaultOasisCLIPath = "/usr/local/bin/oasis"
+
+	// default to one worker per CPU core because build tasks uses all available cores.
+	defaultNumWorkers = 1
+
+	// shutdownTimeout is the timeout for the asynq server to wait for in-progress tasks to complete,
+	// before stopping them and returning the tasks in queue.
+	// This should be less than the shutdown timeout of the application in root.go.
+	shutdownTimeout = 10 * time.Second
+)
 
 // ErrInternalError is the error returned when an internal error occurs during task processing.
 var ErrInternalError = fmt.Errorf("internal error")
@@ -61,13 +71,19 @@ func (w *Worker) Run(ctx context.Context) error {
 	}()
 
 	// Setup the asynq server.
+	concurrency := w.cfg.NumWorkers
+	if concurrency <= 0 {
+		concurrency = defaultNumWorkers
+	}
 	server := asynq.NewServerFromRedisClient(
 		redisClient,
 		asynq.Config{
+			Concurrency: concurrency,
 			Queues: map[string]int{
 				tasks.RoflBuildQueue: 1,
 			},
-			Logger: w.asynqLogger,
+			Logger:          w.asynqLogger,
+			ShutdownTimeout: shutdownTimeout,
 		},
 	)
 	mux := asynq.NewServeMux()

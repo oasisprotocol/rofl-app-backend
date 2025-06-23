@@ -18,6 +18,7 @@ import (
 	"github.com/spruceid/siwe-go"
 
 	"github.com/oasisprotocol/rofl-app-backend/api/common"
+	"github.com/oasisprotocol/rofl-app-backend/config"
 )
 
 type ctxKey string
@@ -26,7 +27,7 @@ const (
 	ctxKeyEthAddress ctxKey = "eth_address"
 
 	nonceTTL = 60 * time.Second
-	jwtTTL   = 15 * time.Minute
+	jwtTTL   = 30 * time.Minute
 )
 
 // CustomClaims are the claims for the JWT.
@@ -138,7 +139,7 @@ func isEthAddress(s string) bool {
 }
 
 // SIWELoginHandler is a handler that logs in a user using a SIWE message.
-func SIWELoginHandler(redisClient *redis.Client, jwtSecret []byte, domain string) func(w http.ResponseWriter, r *http.Request) {
+func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Read and parse raw signed message.
 		var body struct {
@@ -174,12 +175,19 @@ func SIWELoginHandler(redisClient *redis.Client, jwtSecret []byte, domain string
 		nonce := rsp.Val()
 
 		// Verify the message signature.
-		if _, err := msg.Verify(sig, &domain, &nonce, nil /* nil uses time.Now() */); err != nil {
-			slog.Error("invalid SIWE signature", "error", err, "msg", msg.String())
+		if _, err := msg.Verify(sig, &cfg.SIWEDomain, &nonce, nil /* nil uses time.Now() */); err != nil {
 			http.Error(w, "invalid SIWE signature", http.StatusUnauthorized)
 			return
 		}
-		// TODO: Also validate chain id?
+		// Verify the Chain ID if set.
+		if cfg.SIWEChainID != 0 && msg.GetChainID() != cfg.SIWEChainID {
+			http.Error(w, "invalid SIWE chain ID", http.StatusUnauthorized)
+			return
+		}
+		if cfg.SIWEVersion != "" && msg.GetVersion() != cfg.SIWEVersion {
+			http.Error(w, "invalid SIWE version", http.StatusUnauthorized)
+			return
+		}
 
 		// Create a new session token.
 		claims := CustomClaims{
@@ -192,7 +200,7 @@ func SIWELoginHandler(redisClient *redis.Client, jwtSecret []byte, domain string
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 		// Sign the token.
-		tokenString, err := token.SignedString(jwtSecret)
+		tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
 		if err != nil {
 			http.Error(w, "Internal error.", http.StatusInternalServerError)
 			return
