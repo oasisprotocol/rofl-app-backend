@@ -16,7 +16,7 @@ import (
 	siwe "github.com/spruceid/siwe-go"
 	"github.com/stretchr/testify/require"
 
-	"github.com/oasisprotocol/rofl-app-backend/rofl"
+	"github.com/oasisprotocol/rofl-app-backend/tasks"
 )
 
 const (
@@ -126,11 +126,11 @@ func TestE2E(t *testing.T) {
 			require.NoError(err, "failed to read response body")
 			_ = resp.Body.Close()
 
-			var result rofl.BuildTaskResult
+			var result tasks.RoflBuildResult
 			require.NoError(json.Unmarshal(body, &result), "failed to unmarshal response body")
 			if result.Err != "" {
 				slog.Debug("build failed", "error", result.Err, "logs", string(result.Logs))
-				require.FailNow("build failed: %s", result.Err)
+				require.FailNow(result.Err, "build failed", result.Err)
 			}
 			require.NotEmpty(result.Logs, "no logs in response body")
 			require.NotEmpty(result.Manifest, "no manifest in response body")

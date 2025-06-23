@@ -24,7 +24,7 @@ import (
 	"github.com/oasisprotocol/rofl-app-backend/api/auth"
 	"github.com/oasisprotocol/rofl-app-backend/api/common"
 	"github.com/oasisprotocol/rofl-app-backend/config"
-	"github.com/oasisprotocol/rofl-app-backend/rofl"
+	"github.com/oasisprotocol/rofl-app-backend/tasks"
 )
 
 const (
@@ -226,14 +226,14 @@ func (s *Server) Run(ctx context.Context) error {
 				}
 
 				// Create a build task.
-				task, err := rofl.NewBuildTask(addr, req.Manifest, req.Compose)
+				task, err := tasks.NewRoflBuildTask(addr, req.Manifest, req.Compose)
 				if err != nil {
 					slog.Error("failed to create build task", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
 				// TODO: could also ensure only one job per user, via a separate redis lock.
-				info, err := asynqClient.EnqueueContext(r.Context(), task, asynq.Unique(5*time.Minute), asynq.MaxRetry(0), asynq.Timeout(5*time.Minute), asynq.Retention(1*time.Hour), asynq.Queue(rofl.QueueName))
+				info, err := asynqClient.EnqueueContext(r.Context(), task, asynq.Unique(5*time.Minute), asynq.MaxRetry(0), asynq.Timeout(5*time.Minute), asynq.Retention(1*time.Hour), asynq.Queue(tasks.RoflBuildQueue))
 				if err != nil {
 					if errors.Is(err, asynq.ErrDuplicateTask) {
 						common.WriteError(w, http.StatusConflict, "build already in progress")
@@ -261,7 +261,7 @@ func (s *Server) Run(ctx context.Context) error {
 					return
 				}
 
-				results, err := redisClient.Get(r.Context(), rofl.TaskResultsKey(addr, taskID)).Result()
+				results, err := redisClient.Get(r.Context(), tasks.RoflBuildResultsKey(addr, taskID)).Result()
 				switch {
 				case errors.Is(err, redis.Nil):
 					http.NotFound(w, r)
@@ -273,7 +273,7 @@ func (s *Server) Run(ctx context.Context) error {
 				default:
 				}
 
-				var result rofl.BuildTaskResult
+				var result tasks.RoflBuildResult
 				if err := json.Unmarshal([]byte(results), &result); err != nil {
 					slog.Error("failed to unmarshal build task results", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
