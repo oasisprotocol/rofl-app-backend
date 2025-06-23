@@ -14,11 +14,10 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/oasisprotocol/rofl-app-backend/config"
-	"github.com/oasisprotocol/rofl-app-backend/rofl"
+	"github.com/oasisprotocol/rofl-app-backend/tasks"
 	"github.com/oasisprotocol/rofl-app-backend/worker/oasiscli"
 )
 
-// TODO: move this to config?
 const defaultOasisCLIPath = "/usr/local/bin/oasis"
 
 // ErrInternalError is the error returned when an internal error occurs during task processing.
@@ -66,13 +65,13 @@ func (w *Worker) Run(ctx context.Context) error {
 		redisClient,
 		asynq.Config{
 			Queues: map[string]int{
-				rofl.QueueName: 1,
+				tasks.RoflBuildQueue: 1,
 			},
 			Logger: w.asynqLogger,
 		},
 	)
 	mux := asynq.NewServeMux()
-	mux.Handle(rofl.TypeBuildTask, &buildProcessor{cli: cli, redis: redisClient})
+	mux.Handle(tasks.RoflBuildTask, &buildProcessor{cli: cli, redis: redisClient})
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -111,7 +110,7 @@ var _ asynq.Handler = (*buildProcessor)(nil)
 // Implement the asynq.Handler interface.
 func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Unmarshal the payload.
-	var payload rofl.BuildTaskPayload
+	var payload tasks.RoflBuildPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		slog.Error("failed to unmarshal build task payload", "error", err)
 		return ErrInternalError
@@ -128,7 +127,7 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 	// We don't use the result asynq.ResultWriter to write the results, because we want to have this namespaced by the payload address,
 	// not only the Task ID, so that the authenticated user can only access their own results.
-	if err := p.redis.Set(ctx, rofl.TaskResultsKey(payload.UserAddress, t.ResultWriter().TaskID()), resultsJSON, time.Hour).Err(); err != nil {
+	if err := p.redis.Set(ctx, tasks.RoflBuildResultsKey(payload.UserAddress, t.ResultWriter().TaskID()), resultsJSON, time.Hour).Err(); err != nil {
 		slog.Error("failed to save OCI-reference to redis", "error", err)
 		return err
 	}
@@ -149,8 +148,8 @@ func writeFile(path string, data []byte) error {
 	return nil
 }
 
-func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, payload rofl.BuildTaskPayload) rofl.BuildTaskResult {
-	var result rofl.BuildTaskResult
+func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, payload tasks.RoflBuildPayload) tasks.RoflBuildResult {
+	var result tasks.RoflBuildResult
 
 	// Prepare the work dir for the commands.
 	workDir, err := p.cli.NewWorkDir(taskID)
