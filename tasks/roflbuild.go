@@ -53,7 +53,7 @@ type RoflBuildResult struct {
 	OciReference string `json:"oci_reference"`
 	ManifestHash string `json:"manifest_hash"`
 
-	Logs []byte `json:"logs"`
+	Logs string `json:"logs"`
 
 	Err string `json:"err"`
 }

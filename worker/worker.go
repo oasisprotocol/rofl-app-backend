@@ -223,7 +223,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	result.Logs = buildResult.Logs
+	result.Logs = string(buildResult.Logs)
 
 	// Propagate the build command error if it failed.
 	if buildResult.Err != nil {
@@ -248,7 +248,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	result.Logs = append(result.Logs, pushResult.Logs...)
+	result.Logs += "\n" + string(pushResult.Logs)
 
 	// Propagate the push command error if it failed.
 	if pushResult.Err != nil {

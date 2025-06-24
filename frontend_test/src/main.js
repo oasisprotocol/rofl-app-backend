@@ -203,14 +203,6 @@ buildBtn.onclick = async () => {
     }
 
     const result = await statusRes.json();
-    // buildOut.textContent = "Build complete:\n" + JSON.stringify(result, null, 2);
-    let logText = "(no logs)";
-    try {
-      const decoded = atob(result.logs);
-      logText = decoded;
-    } catch (err) {
-      logText = "[invalid base64 log]";
-    }
 
     let manifestText = "(no manifest)";
     try {
@@ -231,7 +223,7 @@ buildBtn.onclick = async () => {
     buildOut.textContent = "Build complete:\n\n" +
       "Summary:\n" + JSON.stringify(summary, null, 2) + "\n\n" +
       "Manifest:\n" + manifestText + "\n\n" +
-      "Logs:\n" + logText;
+      "Logs:\n" + result.logs;
   };
 
   setTimeout(poll, 3000);
