@@ -18,6 +18,7 @@ import (
 	"github.com/spruceid/siwe-go"
 
 	"github.com/oasisprotocol/rofl-app-backend/api/common"
+	"github.com/oasisprotocol/rofl-app-backend/api/recaptcha"
 	"github.com/oasisprotocol/rofl-app-backend/config"
 )
 
@@ -141,51 +142,60 @@ func isEthAddress(s string) bool {
 // SIWELoginHandler is a handler that logs in a user using a SIWE message.
 func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Verify the recaptcha token if configured.
+		if cfg.RecaptchaSecret != "" {
+			if err := recaptcha.CheckRecaptcha(r.Context(), cfg.RecaptchaSecret, r.FormValue(recaptcha.FormField)); err != nil {
+				common.WriteError(w, http.StatusUnauthorized, "invalid recaptcha token")
+				return
+			}
+		}
+
 		// Read and parse raw signed message.
 		var body struct {
 			Message string `json:"message"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+			common.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
 		// Parse the SIWE message.
 		msg, err := siwe.ParseMessage(body.Message)
 		if err != nil {
-			http.Error(w, "invalid SIWE message", http.StatusBadRequest)
+			common.WriteError(w, http.StatusBadRequest, "invalid SIWE message")
 			return
 		}
 		sig := r.URL.Query().Get("sig")
 		if sig == "" {
-			http.Error(w, "missing signature", http.StatusBadRequest)
+			common.WriteError(w, http.StatusBadRequest, "missing signature")
+			return
 		}
 
 		// Fetch the nonce.
 		rsp := redisClient.GetDel(r.Context(), nonceKey(msg.GetAddress().String(), msg.GetNonce()))
 		switch {
 		case errors.Is(rsp.Err(), redis.Nil):
-			http.Error(w, "invalid nonce", http.StatusUnauthorized)
+			common.WriteError(w, http.StatusUnauthorized, "invalid nonce")
 			return
 		case rsp.Err() != nil:
 			slog.Error("failed to get nonce", "error", rsp.Err())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 			return
 		}
 		nonce := rsp.Val()
 
 		// Verify the message signature.
 		if _, err := msg.Verify(sig, &cfg.SIWEDomain, &nonce, nil /* nil uses time.Now() */); err != nil {
-			http.Error(w, "invalid SIWE signature", http.StatusUnauthorized)
+			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
 			return
 		}
 		// Verify the Chain ID if set.
 		if cfg.SIWEChainID != 0 && msg.GetChainID() != cfg.SIWEChainID {
-			http.Error(w, "invalid SIWE chain ID", http.StatusUnauthorized)
+			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE chain ID")
 			return
 		}
 		if cfg.SIWEVersion != "" && msg.GetVersion() != cfg.SIWEVersion {
-			http.Error(w, "invalid SIWE version", http.StatusUnauthorized)
+			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE version")
 			return
 		}
 
@@ -202,7 +212,7 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 		// Sign the token.
 		tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
 		if err != nil {
-			http.Error(w, "Internal error.", http.StatusInternalServerError)
+			common.WriteError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 

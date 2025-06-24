@@ -104,6 +104,10 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 		MaxBytesMiddleware(10*1024*1024), // 10 MB.
 	)
 
+	if s.cfg.Auth.RecaptchaSecret == "" {
+		s.logger.Warn("recaptcha is not enabled")
+	}
+
 	// Health check.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -112,8 +116,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 	// Login routes.
 	r.Route("/auth", func(r chi.Router) {
 		r.Get("/nonce", auth.NonceHandler(redisClient))
-		// Issues a short-lived JWT for the user (15mins).
-		// TODO: We should add a refresh token via secure cookie.
+		// Issues a short-lived JWT for the user.
 		r.Post("/login", auth.SIWELoginHandler(redisClient, s.cfg.Auth))
 	})
 
