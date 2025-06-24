@@ -21,8 +21,11 @@ import (
 const (
 	defaultOasisCLIPath = "/usr/local/bin/oasis"
 
-	// default to one worker per CPU core because build tasks uses all available cores.
-	defaultNumWorkers = 1
+	// For now, only a single worker per process is supported.
+	// This is because the build command uses all available CPU cores,
+	// and limiting to one simplifies CLI command caching.
+	// To parallelize, deploy multiple separate worker processes.
+	numWorkers = 1
 
 	// shutdownTimeout is the timeout for the asynq server to wait for in-progress tasks to complete,
 	// before stopping them and returning the tasks in queue.
@@ -53,9 +56,18 @@ func (w *Worker) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create work directory: %w", err)
 	}
+	var cacheDir string
+	if w.cfg.CacheDir == nil {
+		// Use a temporary directory if no cache dir is configured.
+		cacheDir = filepath.Join(os.TempDir(), fmt.Sprintf("rofl-builder-cache-%d", time.Now().UnixNano()))
+	}
+	// Ensure the cache directory exists.
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
 
 	// Setup the Oasis CLI runner.
-	cli, err := oasiscli.NewRunner(oasisCLIPath, workDir)
+	cli, err := oasiscli.NewRunner(oasisCLIPath, workDir, cacheDir)
 	if err != nil {
 		return fmt.Errorf("failed to create oasis CLI runner: %w", err)
 	}
@@ -72,14 +84,10 @@ func (w *Worker) Run(ctx context.Context) error {
 	}()
 
 	// Setup the asynq server.
-	concurrency := w.cfg.NumWorkers
-	if concurrency <= 0 {
-		concurrency = defaultNumWorkers
-	}
 	server := asynq.NewServerFromRedisClient(
 		redisClient,
 		asynq.Config{
-			Concurrency: concurrency,
+			Concurrency: numWorkers,
 			Queues: map[string]int{
 				tasks.RoflBuildQueue: 1,
 			},

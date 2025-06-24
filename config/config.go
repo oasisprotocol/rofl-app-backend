@@ -134,14 +134,15 @@ func (c *AuthConfig) Validate() error {
 
 // WorkerConfig is the configuration for the worker.
 type WorkerConfig struct {
-	// NumWorkers is the number of workers to run.
-	NumWorkers int `koanf:"num_workers"`
-
 	// Redis is the configuration for the Redis client.
 	Redis *RedisConfig `koanf:"redis"`
 
 	// OasisCLIPath is the path to the Oasis CLI.
 	OasisCLIPath *string `koanf:"oasis_cli_path"`
+
+	// CacheDir is the directory to use for caching the Oasis CLI artifacts.
+	// If unset, a new temporary directory is created on startup.
+	CacheDir *string `koanf:"cache_dir"`
 }
 
 // Validate validates the worker configuration.
