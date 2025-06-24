@@ -18,6 +18,8 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
 	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/x/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/api/option"
 
@@ -37,7 +39,8 @@ var artifactsValidID = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Server is the API server.
 type Server struct {
-	cfg *config.ServerConfig
+	cfg    *config.ServerConfig
+	logger *slog.Logger
 }
 
 // Run implements the Service interface.
@@ -55,6 +58,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 		_ = asynqInspector.Close()
 		_ = redisClient.Close()
 	}()
+	prometheus.MustRegister(metrics.NewQueueMetricsCollector(asynqInspector))
 
 	// Setup a GCS client (In production workload identity should be used, so no need to pass credentials).
 	gcsOpts := []option.ClientOption{}
@@ -151,12 +155,12 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				wc := gcsClient.Bucket(s.cfg.GCSConfig.Bucket).Object(artifactsGKEPath(addr, id)).NewWriter(r.Context())
 
 				if _, err := io.Copy(wc, r.Body); err != nil {
-					slog.Error("failed to write to GCS", "err", err)
+					s.logger.Error("failed to write to GCS", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
 				if err := wc.Close(); err != nil {
-					slog.Error("failed to close GCS writer", "err", err)
+					s.logger.Error("failed to close GCS writer", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
@@ -185,7 +189,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				// Fetch the data from the GCS.
 				rc, err := gcsClient.Bucket(s.cfg.GCSConfig.Bucket).Object(artifactsGKEPath(addr, id)).NewReader(r.Context())
 				if err != nil {
-					slog.Error("failed to get GCS object reader", "err", err)
+					s.logger.Error("failed to get GCS object reader", "err", err)
 					http.NotFound(w, r)
 					return
 				}
@@ -196,7 +200,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				// Stream the content to the response.
 				w.Header().Set("Content-Type", "application/octet-stream")
 				if _, err := io.Copy(w, rc); err != nil {
-					slog.Error("failed to stream object from GCS", "err", err)
+					s.logger.Error("failed to stream object from GCS", "err", err)
 				}
 			})
 		})
@@ -210,7 +214,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				}
 				req, err := common.DecodeJSON[buildRequest](r)
 				if err != nil {
-					slog.Error("failed to decode build request", "err", err)
+					s.logger.Error("failed to decode build request", "err", err)
 					common.WriteError(w, http.StatusBadRequest, "invalid input")
 					return
 				}
@@ -225,7 +229,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				// Create a build task.
 				task, err := tasks.NewRoflBuildTask(addr, []byte(req.Manifest), []byte(req.Compose))
 				if err != nil {
-					slog.Error("failed to create build task", "err", err)
+					s.logger.Error("failed to create build task", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
@@ -236,7 +240,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 						common.WriteError(w, http.StatusConflict, "build already in progress")
 						return
 					}
-					slog.Error("failed to enqueue build task", "err", err)
+					s.logger.Error("failed to enqueue build task", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
@@ -264,14 +268,14 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 					// Check if task is in progress.
 					_, err := asynqInspector.GetTaskInfo(tasks.RoflBuildQueue, taskID)
 					if err != nil {
-						slog.Debug("failed to get build task info", "err", err)
+						s.logger.Debug("failed to get build task info", "err", err)
 						common.WriteError(w, http.StatusNotFound, "task not found")
 						return
 					}
 					common.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "in_progress"})
 					return
 				case err != nil:
-					slog.Error("failed to get build task results", "err", err)
+					s.logger.Error("failed to get build task results", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				default:
@@ -279,7 +283,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 
 				var result tasks.RoflBuildResult
 				if err := json.Unmarshal([]byte(results), &result); err != nil {
-					slog.Error("failed to unmarshal build task results", "err", err)
+					s.logger.Error("failed to unmarshal build task results", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
@@ -299,7 +303,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("starting server", "address", s.cfg.Endpoint)
+		s.logger.Info("starting server", "address", s.cfg.Endpoint)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("server error: %w", err)
 		}
@@ -309,18 +313,19 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		slog.Info("shutting down server")
+		s.logger.Info("shutting down server")
 		if err := server.Shutdown(context.Background()); err != nil {
-			slog.Error("server shutdown error", "err", err)
+			s.logger.Error("server shutdown error", "err", err)
 		}
 	}
 	return nil
 }
 
 // NewServer creates a new API server.
-func NewServer(cfg *config.ServerConfig) *Server {
+func NewServer(cfg *config.ServerConfig, logger *slog.Logger) *Server {
 	return &Server{
-		cfg: cfg,
+		cfg:    cfg,
+		logger: logger,
 	}
 }
 

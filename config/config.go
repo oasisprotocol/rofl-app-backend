@@ -27,6 +27,9 @@ type Config struct {
 
 	// Log is the configuration for the logger.
 	Log LogConfig `koanf:"log"`
+
+	// Metrics is the configuration for the metrics.
+	Metrics *MetricsConfig `koanf:"metrics"`
 }
 
 // Validate validates the configuration.
@@ -40,6 +43,11 @@ func (c *Config) Validate() error {
 
 	if err := c.Log.Validate(); err != nil {
 		return err
+	}
+	if c.Metrics != nil {
+		if err := c.Metrics.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -257,6 +265,20 @@ func (c *LogConfig) Validate() error {
 		if c.Format != "json" && c.Format != "text" {
 			return errors.New("invalid log format")
 		}
+	}
+	return nil
+}
+
+// MetricsConfig contains the metrics configuration.
+type MetricsConfig struct {
+	// PullEndpoint is the address of the Prometheus pull endpoint.
+	PullEndpoint string `koanf:"pull_endpoint"`
+}
+
+// Validate validates the metrics configuration.
+func (c *MetricsConfig) Validate() error {
+	if c.PullEndpoint == "" {
+		return errors.New("pull endpoint is required")
 	}
 	return nil
 }

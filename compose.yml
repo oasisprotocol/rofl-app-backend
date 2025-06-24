@@ -14,6 +14,7 @@ services:
       dockerfile: docker/Dockerfile
     depends_on:
       - redis
+      - fakegcs
     volumes:
       - ./docker/config.yml:/app/config.yml:ro
     command: ["--config", "/app/config.yml"]

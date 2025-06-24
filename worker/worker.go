@@ -36,12 +36,13 @@ var ErrInternalError = fmt.Errorf("internal error")
 // Worker is the worker for the ROFL build task.
 type Worker struct {
 	cfg         *config.WorkerConfig
+	logger      *slog.Logger
 	asynqLogger *asynqLogger
 }
 
 // Run implements the Service interface.
 func (w *Worker) Run(ctx context.Context) error {
-	slog.Info("starting worker")
+	w.logger.Info("starting worker")
 
 	// Setup the Oasis CLI runner.
 	oasisCLIPath := defaultOasisCLIPath
@@ -58,7 +59,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create oasis CLI runner: %w", err)
 	}
-	slog.Info("oasis CLI runner created", "version", cli.Version())
+	w.logger.Info("oasis CLI runner created", "version", cli.Version())
 
 	// Connect to redis.
 	opts, err := redis.ParseURL(w.cfg.Redis.Endpoint)
@@ -87,7 +88,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		},
 	)
 	mux := asynq.NewServeMux()
-	mux.Handle(tasks.RoflBuildTask, &buildProcessor{cli: cli, redis: redisClient})
+	mux.Handle(tasks.RoflBuildTask, &buildProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")})
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -101,24 +102,30 @@ func (w *Worker) Run(ctx context.Context) error {
 		server.Shutdown()
 		return err
 	case <-ctx.Done():
-		slog.Info("shutting down worker")
+		w.logger.Info("shutting down worker")
 		server.Shutdown()
 	}
 	return nil
 }
 
 // NewWorker creates a new worker.
-func NewWorker(cfg *config.WorkerConfig, logConfig config.LogConfig) *Worker {
+func NewWorker(cfg *config.WorkerConfig, logger *slog.Logger, logConfig config.LogConfig) *Worker {
 	return &Worker{
-		cfg:         cfg,
-		asynqLogger: &asynqLogger{logger: logConfig.GetLoggerWithUnwind(9).With("component", "asynq")},
+		cfg:    cfg,
+		logger: logger,
+		asynqLogger: &asynqLogger{
+			// Ideally we would construct logger with unwind from the provided existing logger, but it's currently not possible
+			// to take an existing slog logger and update it with a new unwind.
+			logger: logConfig.GetLoggerWithUnwind(9).With("service", "worker", "component", "asynq"),
+		},
 	}
 }
 
 // buildProcessor is the processor for the ROFL build task.
 type buildProcessor struct {
-	cli   *oasiscli.Runner
-	redis *redis.Client
+	cli    *oasiscli.Runner
+	redis  *redis.Client
+	logger *slog.Logger
 }
 
 var _ asynq.Handler = (*buildProcessor)(nil)
@@ -128,7 +135,7 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Unmarshal the payload.
 	var payload tasks.RoflBuildPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		slog.Error("failed to unmarshal build task payload", "error", err)
+		p.logger.Error("failed to unmarshal build task payload", "error", err)
 		return ErrInternalError
 	}
 
@@ -138,13 +145,13 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Report the results.
 	resultsJSON, err := json.Marshal(result)
 	if err != nil {
-		slog.Error("failed to marshal result", "error", err)
+		p.logger.Error("failed to marshal result", "error", err)
 		return err
 	}
 	// We don't use the result asynq.ResultWriter to write the results, because we want to have this namespaced by the payload address,
 	// not only the Task ID, so that the authenticated user can only access their own results.
 	if err := p.redis.Set(ctx, tasks.RoflBuildResultsKey(payload.UserAddress, t.ResultWriter().TaskID()), resultsJSON, time.Hour).Err(); err != nil {
-		slog.Error("failed to save OCI-reference to redis", "error", err)
+		p.logger.Error("failed to save OCI-reference to redis", "error", err)
 		return err
 	}
 	return nil
@@ -170,23 +177,23 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 	// Prepare the work dir for the commands.
 	workDir, err := p.cli.NewWorkDir(taskID)
 	if err != nil {
-		slog.Error("failed to create work directory", "error", err)
+		p.logger.Error("failed to create work directory", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
 	defer func() {
 		if err := os.RemoveAll(workDir); err != nil {
-			slog.Error("failed to remove work directory", "error", err, "work_dir", workDir)
+			p.logger.Error("failed to remove work directory", "error", err, "work_dir", workDir)
 		}
 	}()
 
 	if err := writeFile(filepath.Join(workDir, "compose.yaml"), payload.Compose); err != nil {
-		slog.Error("failed to setup compose.yaml file", "error", err)
+		p.logger.Error("failed to setup compose.yaml file", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
 	if err := writeFile(filepath.Join(workDir, "rofl.yaml"), payload.Manifest); err != nil {
-		slog.Error("failed to setup rofl.yaml file", "error", err)
+		p.logger.Error("failed to setup rofl.yaml file", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -197,7 +204,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 		WorkDir: workDir,
 	})
 	if err != nil {
-		slog.Error("failed to run build command", "error", err)
+		p.logger.Error("failed to run build command", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -205,13 +212,13 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 
 	// Propagate the build command error if it failed.
 	if buildResult.Err != nil {
-		slog.Error("build command failed", "error", buildResult.Err)
+		p.logger.Error("build command failed", "error", buildResult.Err)
 		result.Err = buildResult.Err.Error()
 		return result
 	}
 
 	if buildResult.Build == nil {
-		slog.Error("build result is nil, but no error was returned")
+		p.logger.Error("build result is nil, but no error was returned")
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -222,7 +229,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 		WorkDir: workDir,
 	})
 	if err != nil {
-		slog.Error("failed to run push command", "error", err)
+		p.logger.Error("failed to run push command", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -230,13 +237,13 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 
 	// Propagate the push command error if it failed.
 	if pushResult.Err != nil {
-		slog.Error("push command failed", "error", pushResult.Err, "logs", pushResult.Logs)
+		p.logger.Error("push command failed", "error", pushResult.Err, "logs", pushResult.Logs)
 		result.Err = pushResult.Err.Error()
 		return result
 	}
 
 	if pushResult.Push == nil {
-		slog.Error("push result is nil, but no error was returned")
+		p.logger.Error("push result is nil, but no error was returned")
 		result.Err = ErrInternalError.Error()
 		return result
 	}
