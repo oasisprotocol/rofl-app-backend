@@ -34,16 +34,22 @@ type Config struct {
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if c.Server == nil {
-		return errors.New("server config is required")
+	if c.Server != nil {
+		if err := c.Server.Validate(); err != nil {
+			return err
+		}
 	}
-	if err := c.Server.Validate(); err != nil {
-		return err
+
+	if c.Worker != nil {
+		if err := c.Worker.Validate(); err != nil {
+			return err
+		}
 	}
 
 	if err := c.Log.Validate(); err != nil {
 		return err
 	}
+
 	if c.Metrics != nil {
 		if err := c.Metrics.Validate(); err != nil {
 			return err
