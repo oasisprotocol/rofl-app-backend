@@ -229,6 +229,19 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 					return
 				}
 
+				// Ensure only one active build per user at a time.
+				lockKey := tasks.RoflBuildLockKey(addr)
+				exists, err := redisClient.Exists(r.Context(), lockKey).Result()
+				if err != nil {
+					s.logger.Error("failed to check build lock", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+				}
+				// Job for the user already in progress.
+				if exists > 0 {
+					common.WriteError(w, http.StatusConflict, "build already in progress")
+					return
+				}
+
 				// Create a build task.
 				task, err := tasks.NewRoflBuildTask(addr, []byte(req.Manifest), []byte(req.Compose))
 				if err != nil {
@@ -236,7 +249,15 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 					return
 				}
-				// XXX: Could also require only one build per user at a time, via a separate redis lock.
+
+				// Set the lock for the user.
+				// Short timeout beause this is just to prevent spamming the build endpoint.
+				if err := redisClient.Set(r.Context(), lockKey, "1", 2*time.Minute).Err(); err != nil {
+					s.logger.Error("failed to set build lock", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+
 				info, err := asynqClient.EnqueueContext(r.Context(), task, tasks.RoflBuildOptions()...)
 				if err != nil {
 					if errors.Is(err, asynq.ErrDuplicateTask) {

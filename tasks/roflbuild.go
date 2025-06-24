@@ -53,7 +53,7 @@ type RoflBuildResult struct {
 	OciReference string `json:"oci_reference"`
 	ManifestHash string `json:"manifest_hash"`
 
-	Logs []byte `json:"logs"`
+	Logs string `json:"logs"`
 
 	Err string `json:"err"`
 }
@@ -61,6 +61,11 @@ type RoflBuildResult struct {
 // RoflBuildResultsKey is the redis key for the results of the rofl build task.
 func RoflBuildResultsKey(address, taskID string) string {
 	return fmt.Sprintf("rofl:build:%s:%s:results", strings.ToLower(address), taskID)
+}
+
+// RoflBuildLockKey is the redis key for the lock of the rofl build task.
+func RoflBuildLockKey(address string) string {
+	return fmt.Sprintf("rofl:build:%s:lock", strings.ToLower(address))
 }
 
 // NewRoflBuildTask creates a new rofl build task.
