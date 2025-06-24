@@ -17,14 +17,8 @@ test-unit:
 test-e2e:
 	go test -v ./e2e/...
 
-
-docker-build:
-	@DOCKER_BUILDKIT=1 docker build --progress=plain \
-		--tag oasislabs/rofl-app:$(USER)-dev \
-		--file Dockerfile \
-		.
 start:
-	docker compose up --build -d
+	COMPOSE_BAKE=true docker compose up --build -d
 
 stop:
 	docker compose down -v -t 0
@@ -37,7 +31,6 @@ logs:
 	build \
 	test-unit \
 	test-e2e \
-	docker-build \
 	start \
 	stop \
 	logs \

@@ -62,8 +62,10 @@ type CommandPushResult struct {
 
 // Runner is a runner for the oasis CLI.
 type Runner struct {
-	cliPath string
-	workDir string
+	cliPath  string
+	workDir  string
+	cacheDir string
+
 	version string
 }
 
@@ -105,6 +107,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	// Setup clean environment.
 	c.Env = []string{
 		"HOME=" + input.WorkDir,
+		"XDG_CACHE_HOME=" + r.cacheDir, // Some CLI commands use XDG cache.
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{
@@ -177,7 +180,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 }
 
 // NewRunner creates a new oasis CLI runner.
-func NewRunner(cliPath, workDir string) (*Runner, error) {
+func NewRunner(cliPath, workDir, cacheDir string) (*Runner, error) {
 	// Ensure the oasis CLI path exists and is executable.
 	if _, err := os.Stat(cliPath); err != nil {
 		return nil, fmt.Errorf("oasis CLI path does not exist: %w", err)
@@ -191,8 +194,9 @@ func NewRunner(cliPath, workDir string) (*Runner, error) {
 	}
 
 	return &Runner{
-		cliPath: cliPath,
-		workDir: workDir,
-		version: string(out),
+		cliPath:  cliPath,
+		workDir:  workDir,
+		cacheDir: cacheDir,
+		version:  string(out),
 	}, nil
 }
