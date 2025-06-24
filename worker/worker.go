@@ -150,6 +150,12 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	// Process the build task.
 	result := p.processBuildTask(ctx, t.ResultWriter().TaskID(), payload)
 
+	// Release the lock for the user.
+	if err := p.redis.Del(ctx, tasks.RoflBuildLockKey(payload.UserAddress)).Err(); err != nil {
+		p.logger.Error("failed to release build lock", "error", err)
+		// Don't return an error here, because we don't want to fail the task in the rare case we could not release the lock.
+	}
+
 	// Report the results.
 	resultsJSON, err := json.Marshal(result)
 	if err != nil {
@@ -162,6 +168,7 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		p.logger.Error("failed to save OCI-reference to redis", "error", err)
 		return err
 	}
+
 	return nil
 }
 

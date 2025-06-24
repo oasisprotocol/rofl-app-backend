@@ -63,6 +63,11 @@ func RoflBuildResultsKey(address, taskID string) string {
 	return fmt.Sprintf("rofl:build:%s:%s:results", strings.ToLower(address), taskID)
 }
 
+// RoflBuildLockKey is the redis key for the lock of the rofl build task.
+func RoflBuildLockKey(address string) string {
+	return fmt.Sprintf("rofl:build:%s:lock", strings.ToLower(address))
+}
+
 // NewRoflBuildTask creates a new rofl build task.
 func NewRoflBuildTask(userAddress string, manifest, compose []byte) (*asynq.Task, error) {
 	payload, err := json.Marshal(RoflBuildPayload{
