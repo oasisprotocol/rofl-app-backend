@@ -15,6 +15,7 @@ import (
 
 	"github.com/oasisprotocol/rofl-app-backend/api"
 	"github.com/oasisprotocol/rofl-app-backend/config"
+	"github.com/oasisprotocol/rofl-app-backend/metrics"
 	"github.com/oasisprotocol/rofl-app-backend/worker"
 )
 
@@ -50,16 +51,17 @@ func rootMain(_ *cobra.Command, _ []string) {
 	}
 
 	// Setup logger.
-	slog.SetDefault(cfg.Log.GetLogger())
+	logger := cfg.Log.GetLogger()
+	slog.SetDefault(logger)
 
 	// Spin up services.
 	var wg sync.WaitGroup
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	if cfg.Server != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			server := api.NewServer(cfg.Server)
+			server := api.NewServer(cfg.Server, logger.With("service", "api"))
 			if err := server.Run(ctx); err != nil {
 				errCh <- err
 			}
@@ -69,8 +71,18 @@ func rootMain(_ *cobra.Command, _ []string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			worker := worker.NewWorker(cfg.Worker, cfg.Log)
+			worker := worker.NewWorker(cfg.Worker, logger.With("service", "worker"), cfg.Log)
 			if err := worker.Run(ctx); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	if cfg.Metrics != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			metrics := metrics.NewServer(cfg.Metrics, logger.With("service", "metrics"))
+			if err := metrics.Run(ctx); err != nil {
 				errCh <- err
 			}
 		}()

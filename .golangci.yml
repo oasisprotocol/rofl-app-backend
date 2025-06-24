@@ -45,6 +45,7 @@ linters:
             - github.com/spruceid/siwe-go
             - cloud.google.com/go/storage
             - google.golang.org/api/option
+            - github.com/prometheus/client_golang/prometheus
           deny:
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
