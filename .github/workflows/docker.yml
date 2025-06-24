@@ -8,8 +8,8 @@ name: docker # This name appears in GitHub's Checks API and in workflow's status
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:  # manual; for debugging workflow before merging branch into `main`
+      - master
+  workflow_dispatch:  # manual; for debugging workflow before merging branch into `master`
 
 permissions:
   packages: write
