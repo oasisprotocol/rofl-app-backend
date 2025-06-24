@@ -116,6 +116,10 @@ type AuthConfig struct {
 
 	// JWTSecret is the secret for the JWT token generation.
 	JWTSecret string `koanf:"jwt_secret"`
+
+	// RecaptchaSecret is the secret for the recaptcha verification.
+	// If unset, recaptcha verification is not performed.
+	RecaptchaSecret string `koanf:"recaptcha_secret"`
 }
 
 // Validate validates the authentication configuration.

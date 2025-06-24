@@ -37,15 +37,16 @@ linters:
             - github.com/go-chi/chi/v5
             - github.com/go-chi/cors
             - github.com/go-chi/httplog/v3
+            - cloud.google.com/go/storage
             - github.com/golang-jwt/jwt/v5
             - github.com/hibiken/asynq
             - github.com/knadh/koanf
+            - github.com/prometheus/client_golang/prometheus
             - github.com/redis/go-redis/v9
             - github.com/spf13/cobra
             - github.com/spruceid/siwe-go
-            - cloud.google.com/go/storage
+            - golang.org/x/net/context/ctxhttp
             - google.golang.org/api/option
-            - github.com/prometheus/client_golang/prometheus
           deny:
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
