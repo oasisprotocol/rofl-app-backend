@@ -42,3 +42,15 @@ services:
               -port=4443 \
               -public-host=fakegcs:4443 \
               -data=/data
+
+  # TODO: Uncomment if you want to run prometheus as well.
+  # prometheus:
+  #   image: prom/prometheus
+  #   volumes:
+  #     - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #   ports:
+  #     - "127.0.0.1:9090:9090"
+  #   depends_on:
+  #     - app
