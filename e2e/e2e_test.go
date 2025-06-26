@@ -97,6 +97,7 @@ func TestE2E(t *testing.T) {
 		require.NotEmpty(buildRes.TaskID, "no task ID in response body")
 
 		// Poll for the build results.
+		start := time.Now()
 		timeout := time.After(5 * time.Minute)
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -119,7 +120,7 @@ func TestE2E(t *testing.T) {
 				require.FailNow("unexpected status code: %d", resp.StatusCode)
 			}
 
-			t.Log("task completed")
+			t.Log("task completed", "after", time.Since(start))
 
 			// Ensure build succeeded.
 			body, err := io.ReadAll(resp.Body)
