@@ -29,6 +29,8 @@ const (
 
 	nonceTTL = 60 * time.Second
 	jwtTTL   = 30 * time.Minute
+
+	siweStatement = "Sign in to ROFL App Backend"
 )
 
 // CustomClaims are the claims for the JWT.
@@ -189,6 +191,17 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
 			return
 		}
+		// Verify the statement.
+		statement := msg.GetStatement()
+		if statement == nil {
+			common.WriteError(w, http.StatusUnauthorized, "missing statement")
+			return
+		}
+		if *statement != siweStatement {
+			common.WriteError(w, http.StatusUnauthorized, "invalid statement")
+			return
+		}
+
 		// Verify the Chain ID if set.
 		if cfg.SIWEChainID != 0 && msg.GetChainID() != cfg.SIWEChainID {
 			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE chain ID")

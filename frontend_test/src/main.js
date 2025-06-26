@@ -25,7 +25,7 @@ loginBtn.onclick = async () => {
   const siweMsg = new SiweMessage({
     domain: "localhost",
     address: checksummed,
-    statement: "Sign in to localhost",
+    statement: "Sign in to ROFL App Backend",
     uri: "http://" + domain,
     version: "1",
     chainId: 1,
