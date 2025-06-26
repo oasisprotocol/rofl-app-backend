@@ -168,7 +168,7 @@ func doSIWELogin(t *testing.T, client *http.Client) string {
 	msg, err := siwe.InitMessage(siweDomain, addr.Hex(), "http://"+siweDomain, nonceRes.Nonce, map[string]interface{}{
 		"chainId":   1,
 		"version":   "1",
-		"statement": "Sign in to localhost",
+		"statement": "Sign in to ROFL App Backend",
 	})
 	require.NoError(err, "failed to build SIWE message")
 	msgHash := signHash([]byte(msg.String()))
