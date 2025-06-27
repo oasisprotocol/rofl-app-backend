@@ -8,7 +8,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
-  app:
+  api:
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -16,10 +16,20 @@ services:
       - redis
       - fakegcs
     volumes:
-      - ./docker/config.yml:/app/config.yml:ro
-    command: ["--config", "/app/config.yml"]
+      - ./docker/config-api.yml:/app/config-api.yml:ro
+    command: ["--config", "/app/config-api.yml"]
     ports:
       - "127.0.0.1:8899:8899"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      - redis
+    volumes:
+      - ./docker/config-worker.yml:/app/config-worker.yml:ro
+    command: ["--config", "/app/config-worker.yml"]
 
   redis:
     image: redis:7-alpine

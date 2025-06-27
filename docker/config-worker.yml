@@ -1,0 +1,10 @@
+worker:
+  redis:
+    endpoint: "redis://redis:6379"
+
+log:
+  level: "debug"
+  format: "json"
+
+metrics:
+  pull_endpoint: "0.0.0.0:9090"

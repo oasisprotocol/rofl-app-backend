@@ -3,7 +3,9 @@ import { getAddress } from 'ethers';
 import { Buffer } from 'buffer';
 window.Buffer = Buffer;
 
-const domain = "localhost:3000";
+// const domain = "backend.rofl.app";
+const domain = "localhost";
+// const backend = "https://backend.rofl.app:443";
 const backend = "http://localhost:8899";
 
 // SIWE Login test.
@@ -23,10 +25,10 @@ loginBtn.onclick = async () => {
   const { nonce } = await nonceRes.json();
 
   const siweMsg = new SiweMessage({
-    domain: "localhost",
+    domain: domain,
     address: checksummed,
     statement: "Sign in to ROFL App Backend",
-    uri: "http://" + domain,
+    uri: "https://" + domain,
     version: "1",
     chainId: 1,
     issuedAt: new Date().toISOString(),
@@ -229,3 +231,65 @@ buildBtn.onclick = async () => {
   setTimeout(poll, 3000);
 };
 
+
+
+// SIWE scheduler login test.
+const schedulerLoginBtn = document.getElementById("scheduler-login");
+schedulerLoginBtn.onclick = async () => {
+  const [address] = await window.ethereum.request({ method: "eth_requestAccounts" });
+  const checksummed = getAddress(address);
+
+   let  url= "https://test-scheduler-a.rofl.app";
+
+  let providerAddress = "oasis1qrfeadn03ljm0kfx8wx0d5zf6kj79pxqvv0dukdm";
+
+  // Get domain from the url.
+  const domain = new URL(url).hostname;
+
+  console.log("domain", domain, "providerAddress", providerAddress);
+
+  const siweMsg = new SiweMessage({
+    domain: "localhost",
+    address: checksummed,
+    statement: `Authenticate to ROFL provider ${providerAddress} to manage your machines via API at ${domain}.`,
+    uri: "http://" + domain,
+    version: "1",
+    chainId: 1,
+    issuedAt: new Date().toISOString(),
+    expirationTime: new Date(Date.now() + 1000 * 60 * 60 * 1).toISOString() // 1 hour.
+  });
+
+  const message = siweMsg.prepareMessage();
+  const signature = await window.ethereum.request({
+    method: "personal_sign",
+    params: [message, address],
+  });
+
+  const body = {
+    method: "siwe",
+    data: {
+      message: message,
+      signature: signature.slice(2), // Without the 0x prefix.
+    }
+  }
+
+  const res = await fetch(`${url}/rofl-scheduler/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+  if (!data.token) {
+    output.textContent = "Login failed: " + JSON.stringify(data);
+    return;
+  }
+
+  localStorage.setItem("scheduler-jwt", data.token);
+  console.log("Scheduler login successful!");
+};
+
+logoutBtn.onclick = () => {
+  localStorage.removeItem("jwt");
+  location.reload();
+};

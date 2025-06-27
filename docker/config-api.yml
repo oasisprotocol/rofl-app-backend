@@ -10,10 +10,6 @@ server:
     bucket: "rofl-app-backend"
     fake_gcs_address: "http://fakegcs:4443"
 
-worker:
-  redis:
-    endpoint: "redis://redis:6379"
-
 log:
   level: "debug"
   format: "json"
