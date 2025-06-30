@@ -96,7 +96,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		},
 	)
 	mux := asynq.NewServeMux()
-	mux.Handle(tasks.RoflBuildTask, &buildProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")})
+	mux.Handle(tasks.RoflBuildTask, newMetricsWrapper(tasks.RoflBuildQueue, &buildProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")}))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -140,6 +140,9 @@ var _ asynq.Handler = (*buildProcessor)(nil)
 
 // Implement the asynq.Handler interface.
 func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
+	taskID := t.ResultWriter().TaskID()
+	p.logger.Debug("processing build task", "task_id", taskID)
+
 	// Unmarshal the payload.
 	var payload tasks.RoflBuildPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
@@ -148,7 +151,7 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 
 	// Process the build task.
-	result := p.processBuildTask(ctx, t.ResultWriter().TaskID(), payload)
+	result := p.processBuildTask(ctx, taskID, payload)
 
 	// Release the lock for the user.
 	if err := p.redis.Del(ctx, tasks.RoflBuildLockKey(payload.UserAddress)).Err(); err != nil {
@@ -164,11 +167,12 @@ func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	}
 	// We don't use the result asynq.ResultWriter to write the results, because we want to have this namespaced by the payload address,
 	// not only the Task ID, so that the authenticated user can only access their own results.
-	if err := p.redis.Set(ctx, tasks.RoflBuildResultsKey(payload.UserAddress, t.ResultWriter().TaskID()), resultsJSON, time.Hour).Err(); err != nil {
+	if err := p.redis.Set(ctx, tasks.RoflBuildResultsKey(payload.UserAddress, taskID), resultsJSON, time.Hour).Err(); err != nil {
 		p.logger.Error("failed to save OCI-reference to redis", "error", err)
 		return err
 	}
 
+	p.logger.Debug("build task processed", "task_id", taskID)
 	return nil
 }
 
