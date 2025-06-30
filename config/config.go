@@ -109,8 +109,8 @@ func (c *ServerConfig) Validate() error {
 
 // AuthConfig is the configuration for the authentication.
 type AuthConfig struct {
-	// SIWEDomain is the domain of the SIWE authentication.
-	SIWEDomain string `koanf:"siwe_domain"`
+	// SIWEDomains is the list of allowed domains of the SIWE authentication.
+	SIWEDomains []string `koanf:"siwe_domains"`
 
 	// SIWEChainID is the chain ID of the SIWE authentication.
 	// If unset, chain ID is not checked.
@@ -130,8 +130,8 @@ type AuthConfig struct {
 
 // Validate validates the authentication configuration.
 func (c *AuthConfig) Validate() error {
-	if c.SIWEDomain == "" {
-		return errors.New("siwe domain is required")
+	if len(c.SIWEDomains) == 0 {
+		return errors.New("siwe domains are required")
 	}
 	if c.JWTSecret == "" {
 		return errors.New("jwt secret is required")
