@@ -42,7 +42,7 @@ type metricsProcessor struct {
 func (p *metricsProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 	startTime := time.Now()
 	err := p.innerHandler.ProcessTask(ctx, t)
-	if err != nil {
+	if err == nil {
 		// Only observe the duration if the task was successful.
 		taskDuration.WithLabelValues(p.taskName).Observe(time.Since(startTime).Seconds())
 	}
