@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -187,10 +188,21 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 		nonce := rsp.Val()
 
 		// Verify the message signature.
-		if _, err := msg.Verify(sig, &cfg.SIWEDomain, &nonce, nil /* nil uses time.Now() */); err != nil {
+		if _, err := msg.Verify(sig /* We validate the domain below, since we allow multiple domains. */, nil, &nonce, nil /* nil uses time.Now() */); err != nil {
 			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
 			return
 		}
+
+		// Verify the domain.
+		domain := msg.GetDomain()
+		if domain == "" {
+			common.WriteError(w, http.StatusUnauthorized, "missing domain")
+		}
+		if !slices.Contains(cfg.SIWEDomains, domain) {
+			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE domain")
+			return
+		}
+
 		// Verify the statement.
 		statement := msg.GetStatement()
 		if statement == nil {
