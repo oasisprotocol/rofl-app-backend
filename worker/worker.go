@@ -231,13 +231,13 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 
 	// Propagate the build command error if it failed.
 	if buildResult.Err != nil {
-		p.logger.Error("build command failed", "error", buildResult.Err)
+		p.logger.Error("build command failed", "error", buildResult.Err, "logs", buildResult.Logs)
 		result.Err = buildResult.Err.Error()
 		return result
 	}
 
 	if buildResult.Build == nil {
-		p.logger.Error("build result is nil, but no error was returned")
+		p.logger.Error("build result is nil, but no error was returned", "logs", buildResult.Logs)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -262,7 +262,7 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 	}
 
 	if pushResult.Push == nil {
-		p.logger.Error("push result is nil, but no error was returned")
+		p.logger.Error("push result is nil, but no error was returned", "logs", pushResult.Logs)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
