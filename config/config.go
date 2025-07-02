@@ -123,6 +123,10 @@ type AuthConfig struct {
 	// JWTSecret is the secret for the JWT token generation.
 	JWTSecret string `koanf:"jwt_secret"`
 
+	// JWTExpiry is the expiry time for the JWT token.
+	// If unset, the default expiry time is used.
+	JWTExpiry *time.Duration `koanf:"jwt_expiry"`
+
 	// RecaptchaSecret is the secret for the recaptcha verification.
 	// If unset, recaptcha verification is not performed.
 	RecaptchaSecret string `koanf:"recaptcha_secret"`
@@ -138,6 +142,12 @@ func (c *AuthConfig) Validate() error {
 	}
 	if len(c.JWTSecret) < 32 {
 		return errors.New("jwt secret must be at least 32 characters long")
+	}
+	if c.JWTExpiry != nil && *c.JWTExpiry < 5*time.Minute {
+		return errors.New("jwt expiry must be greater than 5 minutes")
+	}
+	if c.JWTExpiry != nil && *c.JWTExpiry > 7*24*time.Hour {
+		return errors.New("jwt expiry must be less than 7 days")
 	}
 	return nil
 }

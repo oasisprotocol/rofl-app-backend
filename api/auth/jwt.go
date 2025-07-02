@@ -28,8 +28,8 @@ type ctxKey string
 const (
 	ctxKeyEthAddress ctxKey = "eth_address"
 
-	nonceTTL = 60 * time.Second
-	jwtTTL   = 30 * time.Minute
+	nonceTTL         = 60 * time.Second
+	defaultJWTExpiry = 12 * time.Hour
 
 	siweStatement = "Sign in to ROFL App Backend"
 )
@@ -144,6 +144,10 @@ func isEthAddress(s string) bool {
 
 // SIWELoginHandler is a handler that logs in a user using a SIWE message.
 func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w http.ResponseWriter, r *http.Request) {
+	jwtTTL := defaultJWTExpiry
+	if cfg.JWTExpiry != nil {
+		jwtTTL = *cfg.JWTExpiry
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Verify the recaptcha token if configured.
 		if cfg.RecaptchaSecret != "" {
