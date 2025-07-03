@@ -23,6 +23,8 @@ const (
 	CommandBuild Command = "build"
 	// CommandPush is the command to push the previously built OCI image.
 	CommandPush Command = "push"
+	// CommandValidate is the command to validate the manifest.
+	CommandValidate Command = "validate"
 )
 
 // RunInput is the input for a command.
@@ -39,6 +41,8 @@ type CommandResult struct {
 	Build *CommandBuildResult `json:"build,omitempty"`
 	// Push is the result of the push command.
 	Push *CommandPushResult `json:"push,omitempty"`
+	// Validate is the result of the validate command.
+	Validate *CommandValidateResult `json:"validate,omitempty"`
 
 	// Logs are the outputted logs by the command.
 	Logs []byte `json:"logs"`
@@ -59,6 +63,9 @@ type CommandPushResult struct {
 	// ManifestHash is the hash of the manifest of the pushed OCI image.
 	ManifestHash string `json:"manifest_hash"`
 }
+
+// CommandValidateResult is the result of the validate command.
+type CommandValidateResult struct{}
 
 // Runner is a runner for the oasis CLI.
 type Runner struct {
@@ -98,6 +105,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 		args = []string{"rofl", "build"}
 	case CommandPush:
 		args = []string{"rofl", "push", "--format", "json"}
+	case CommandValidate:
+		args = []string{"rofl", "build", "--only-validate"}
 	default:
 		return nil, fmt.Errorf("unsupported command: %s", input.Command)
 	}
@@ -174,6 +183,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 			OciReference: parsed["oci_reference"],
 			ManifestHash: parsed["manifest_hash"],
 		}
+	case CommandValidate:
+		results.Validate = &CommandValidateResult{}
 	}
 
 	return results, nil

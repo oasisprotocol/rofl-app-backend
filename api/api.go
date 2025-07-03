@@ -134,7 +134,6 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 			common.WriteJSON(w, http.StatusOK, map[string]string{"address": addr})
 		})
 
-		// TODO: Need to coordinate with frontend here, do we want such general storage, or more specific.
 		r.Route("/artifacts", func(r chi.Router) {
 			// User can store arbitrary artifacts here.
 			r.Put("/{id}", func(w http.ResponseWriter, r *http.Request) {
