@@ -12,8 +12,6 @@ To run the local development environment using Docker Compose:
 make start
 ```
 
-- A simple test frontend is available at: http://localhost:3000
-
 - Backend available at: http://localhost:8899
 
 ## Features
