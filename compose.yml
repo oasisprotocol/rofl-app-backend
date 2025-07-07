@@ -1,13 +1,6 @@
 name: rofl-app-backend
 
 services:
-  example-frontend:
-    build:
-      context: frontend_test/
-      dockerfile: Dockerfile
-    ports:
-      - "127.0.0.1:3000:3000"
-
   api:
     build:
       context: .
