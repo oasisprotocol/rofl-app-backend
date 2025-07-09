@@ -11,7 +11,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/hibiken/asynq v0.25.1
 	github.com/hibiken/asynq/x v0.0.0-20250401060612-c327bc40a28e
-	github.com/knadh/koanf/parsers/yaml v1.0.0
+	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.2.1
@@ -81,6 +81,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.36.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.3 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
