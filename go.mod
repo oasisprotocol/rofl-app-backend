@@ -5,7 +5,7 @@ go 1.24.4
 require (
 	cloud.google.com/go/storage v1.55.0
 	github.com/ethereum/go-ethereum v1.12.1
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httplog/v3 v3.2.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
