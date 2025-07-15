@@ -7,11 +7,19 @@ on:
   push:
     branches:
       - master
+    paths-ignore: # Do not trigger if _only_ these files were changed.
+      - .punch_version.py
+      - .changelog/*.md
+      - CHANGELOG.md
   # Or when a pull request event occurs for a pull request against one of the
   # matched branches.
   pull_request:
     branches:
       - master
+    paths-ignore: # Do not trigger if _only_ these files were changed.
+      - .punch_version.py
+      - .changelog/*.md
+      - CHANGELOG.md
 
 # Cancel in-progress jobs on same branch.
 concurrency:
@@ -43,6 +51,12 @@ jobs:
         run: |
           make lint-git
         # Always run this step so that all linting errors can be seen at once, but skip for dependabot
+        if: always() && github.actor != 'dependabot[bot]'
+
+      - name: Lint Change Log fragments
+        run: |
+          make lint-changelog
+        # Always run this step so that all linting errors can be seen at once.
         if: always() && github.actor != 'dependabot[bot]'
 
       - name: Set up Go

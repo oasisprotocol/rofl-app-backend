@@ -1,0 +1,38 @@
+version: 2
+project_name: Rofl App Backend
+
+before:
+  hooks:
+    - go mod tidy -compat=1.24
+
+builds:
+  - binary: rofl-app-backend
+    env:
+      - CGO_ENABLED=0  # build statically-linked binaries
+    flags:
+      - -trimpath
+    ldflags:
+      - -buildid=
+      - "{{.Env.GOLDFLAGS_VERSION}}"
+    goos:
+      - linux
+    goarch:
+      - amd64
+
+archives:
+  - name_template: "{{replace .ProjectName \" \" \"_\" | tolower}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    wrap_in_directory: "true"
+
+checksum:
+  name_template: SHA256SUMS-{{.Version}}.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+release:
+  name_template: "{{.ProjectName}} {{.Version}}"
+
+  # If set to auto, will mark the release as not ready for production
+  # in case there is an indicator for this in the tag e.g. v1.0.0-rc1.
+  prerelease: auto
