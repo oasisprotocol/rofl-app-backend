@@ -9,6 +9,10 @@ on:
   push:
     branches:
       - master
+    paths-ignore: # Do not trigger if _only_ these files were changed.
+      - .punch_version.py
+      - .changelog/*.md
+      - CHANGELOG.md
   workflow_dispatch:  # manual; for debugging workflow before merging branch into `master`
 
 permissions:
