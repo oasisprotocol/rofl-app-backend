@@ -52,7 +52,7 @@ MARKDOWNLINT_CLI_VERSION := 0.26.0
 GIT_ORIGIN_REMOTE ?= origin
 
 # Name of the branch where to tag the next release.
-RELEASE_BRANCH ?= main
+RELEASE_BRANCH ?= master
 
 # Determine project's version from git.
 # NOTE: This computes the project's version from the latest version tag
@@ -101,7 +101,7 @@ VERSION := $(or \
 # Helper that bumps project's version with the Punch tool.
 define PUNCH_BUMP_VERSION =
 	PART=patch; \
-	if [[ "$(RELEASE_BRANCH)" == main ]]; then \
+	if [[ "$(RELEASE_BRANCH)" == master ]]; then \
 		if [[ -n "$(CHANGELOG_FRAGMENTS_BREAKING)" ]]; then \
 			PART=major; \
 		elif [[ -n "$(CHANGELOG_FRAGMENTS_FEATURES)" ]]; then \
@@ -137,7 +137,7 @@ define ENSURE_GIT_VERSION_EQUALS_PUNCH_VERSION =
 endef
 
 # Project's version as the linker's string value definition.
-export GOLDFLAGS_VERSION := -X github.com/oasisprotocol/nexus/version.Software=$(VERSION)
+export GOLDFLAGS_VERSION := -X github.com/oasisprotocol/rofl-app-backend/version.Software=$(VERSION)
 
 # Go's linker flags.
 export GOLDFLAGS ?= "$(GOLDFLAGS_VERSION)"
@@ -270,7 +270,7 @@ endef
 # Helper that ensures $(RELEASE_BRANCH) variable contains a valid release branch
 # name.
 define ENSURE_VALID_RELEASE_BRANCH_NAME =
-	if [[ ! $(RELEASE_BRANCH) =~ ^(main|(stable/[0-9]+\.[0-9]+\.x$$)) ]]; then \
+	if [[ ! $(RELEASE_BRANCH) =~ ^(master|(stable/[0-9]+\.[0-9]+\.x$$)) ]]; then \
 		$(ECHO) "$(RED)Error: Invalid release branch name: '$(RELEASE_BRANCH)'."; \
 		exit 1; \
 	fi
@@ -288,15 +288,15 @@ For a list of changes in this release, see the [Change Log].
 *NOTE: If you are upgrading from an earlier release, please **carefully review**
 the [Change Log] for **Removals and Breaking changes**.*
 
-[Change Log]: https://github.com/oasisprotocol/nexus/blob/v$(VERSION)/CHANGELOG.md
+[Change Log]: https://github.com/oasisprotocol/rofl-app-backend/blob/v$(VERSION)/CHANGELOG.md
 
 endef
 
-GORELEASER_ARGS ?= release --rm-dist
+GORELEASER_ARGS ?= release --clean
 # If the appropriate environment variable is set, create a real release.
-ifeq ($(NEXUS_REAL_RELEASE), true)
+ifeq ($(ROFL_APP_BACKEND_REAL_RELEASE), true)
 # Create temporary file with GitHub release's text.
-_RELEASE_NOTES_FILE := $(shell mktemp /tmp/nexus.XXXXX)
+_RELEASE_NOTES_FILE := $(shell mktemp /tmp/rofl-app-backend.XXXXX)
 _ := $(shell printf "$(subst ",\",$(subst $(newline),\n,$(RELEASE_TEXT)))" > $(_RELEASE_NOTES_FILE))
 GORELEASER_ARGS = release --release-notes $(_RELEASE_NOTES_FILE)
 endif
