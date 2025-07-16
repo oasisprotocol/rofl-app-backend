@@ -1,2 +1,4 @@
 # Built binaries.
 /rofl-app-backend
+
+__pycache__
