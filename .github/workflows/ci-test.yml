@@ -21,6 +21,9 @@ on:
       - .changelog/*.md
       - CHANGELOG.md
 
+permissions:
+  contents: read
+
 # Cancel in-progress jobs on same branch.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

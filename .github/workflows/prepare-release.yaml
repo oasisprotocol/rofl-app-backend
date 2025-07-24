@@ -29,6 +29,9 @@ on:
       - .changelog/*.md
       - CHANGELOG.md
 
+permissions:
+  contents: read
+
 jobs:
   build-go:
     name: build-go

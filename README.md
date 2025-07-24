@@ -1,4 +1,4 @@
-# ROFL App Backend (name to be decided)
+# ROFL App Backend
 
 A backend for [ROFL App], a web-based dashboard application for creating,
 exploring, monitoring and interacting with Oasis ROFL (Runtime Offchain Logic)
