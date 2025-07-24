@@ -250,7 +250,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 				}
 
 				// Set the lock for the user.
-				// Short timeout beause this is just to prevent spamming the build endpoint.
+				// Short timeout because this is just to prevent spamming the build endpoint.
 				if err := redisClient.Set(r.Context(), lockKey, "1", 2*time.Minute).Err(); err != nil {
 					s.logger.Error("failed to set build lock", "err", err)
 					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
