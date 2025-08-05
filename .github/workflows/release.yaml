@@ -70,6 +70,7 @@ jobs:
           tags: |
             ghcr.io/oasisprotocol/rofl-app-backend:${{ env.TAG }}
           push: true
+          provenance: false
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
             org.opencontainers.image.revision=${{ github.sha }}
