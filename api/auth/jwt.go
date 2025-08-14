@@ -189,13 +189,6 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 			common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 			return
 		}
-		nonce := rsp.Val()
-
-		// Verify the message signature.
-		if _, err := msg.Verify(sig /* We validate the domain below, since we allow multiple domains. */, nil, &nonce, nil /* nil uses time.Now() */); err != nil {
-			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
-			return
-		}
 
 		// Verify the domain.
 		domain := msg.GetDomain()
