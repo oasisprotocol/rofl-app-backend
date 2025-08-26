@@ -119,12 +119,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 		"XDG_CACHE_HOME=" + r.cacheDir, // Some CLI commands use XDG cache.
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 	}
-	c.SysProcAttr = &syscall.SysProcAttr{
-		// Isolate process group.
-		Setpgid: true,
-		// Kill the process if the parent process dies.
-		Pdeathsig: syscall.SIGKILL,
-	}
+	c.SysProcAttr = getSysProcAttr()
 
 	var outputBuf bytes.Buffer
 	c.Stdout = &outputBuf

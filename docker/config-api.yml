@@ -5,7 +5,7 @@ server:
     endpoint: "redis://redis:6379"
   auth:
     jwt_secret: 861165cf04fcbae2b171b0c39fa2bc4428b1b0f9626d42ff97a1c4e3b0441c24
-    siwe_domains: ["localhost"]
+    siwe_domains: ["localhost", "dev.rofl.app"]
   gcs:
     bucket: "rofl-app-backend"
     fake_gcs_address: "http://fakegcs:4443"

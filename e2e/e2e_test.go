@@ -166,7 +166,7 @@ func doSIWELogin(t *testing.T, client *http.Client) string {
 
 	// Build and sign the SIWE message.
 	msg, err := siwe.InitMessage(siweDomain, addr.Hex(), "http://"+siweDomain, nonceRes.Nonce, map[string]interface{}{
-		"chainId":   1,
+		"chainId":   0x5aff,
 		"version":   "1",
 		"statement": "Sign in to ROFL App Backend",
 	})

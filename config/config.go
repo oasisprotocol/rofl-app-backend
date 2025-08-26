@@ -112,10 +112,6 @@ type AuthConfig struct {
 	// SIWEDomains is the list of allowed domains of the SIWE authentication.
 	SIWEDomains []string `koanf:"siwe_domains"`
 
-	// SIWEChainID is the chain ID of the SIWE authentication.
-	// If unset, chain ID is not checked.
-	SIWEChainID int `koanf:"siwe_chain_id"`
-
 	// SIWEVersion is the version of the SIWE authentication.
 	// If unset, version is not checked.
 	SIWEVersion string `koanf:"siwe_version"`

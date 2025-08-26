@@ -24,6 +24,10 @@ linters:
       - path: e2e/
         linters:
           - depguard
+      # Exclude var-naming.
+      - linters:
+          - revive
+        text: var-naming
 
   settings:
     depguard:
@@ -34,6 +38,10 @@ linters:
           allow:
             - $gostd
             - github.com/oasisprotocol/rofl-app-backend
+            - github.com/oasisprotocol/oasis-sdk/client-sdk/go
+            - github.com/ethereum/go-ethereum/accounts/abi
+            - github.com/ethereum/go-ethereum/common
+            - github.com/ethereum/go-ethereum/crypto
             - github.com/go-chi/chi/v5
             - github.com/go-chi/cors
             - github.com/go-chi/httplog/v3
