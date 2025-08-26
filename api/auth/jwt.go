@@ -18,8 +18,13 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spruceid/siwe-go"
 
+	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/client"
+	"github.com/oasisprotocol/oasis-sdk/client-sdk/go/connection"
+
 	"github.com/oasisprotocol/rofl-app-backend/api/common"
 	"github.com/oasisprotocol/rofl-app-backend/api/recaptcha"
+	"github.com/oasisprotocol/rofl-app-backend/chainclient"
+	"github.com/oasisprotocol/rofl-app-backend/chainclient/erc1271"
 	"github.com/oasisprotocol/rofl-app-backend/config"
 )
 
@@ -28,7 +33,8 @@ type ctxKey string
 const (
 	ctxKeyEthAddress ctxKey = "eth_address"
 
-	nonceTTL         = 60 * time.Second
+	// 10 minutes should be enough to also cover the smart-account multi-signature flow.
+	nonceTTL         = 600 * time.Second
 	defaultJWTExpiry = 12 * time.Hour
 
 	siweStatement = "Sign in to ROFL App Backend"
@@ -143,7 +149,7 @@ func isEthAddress(s string) bool {
 }
 
 // SIWELoginHandler is a handler that logs in a user using a SIWE message.
-func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w http.ResponseWriter, r *http.Request) {
+func SIWELoginHandler(redisClient *redis.Client, chainPool *chainclient.Pool, cfg *config.AuthConfig) func(w http.ResponseWriter, r *http.Request) {
 	jwtTTL := defaultJWTExpiry
 	if cfg.JWTExpiry != nil {
 		jwtTTL = *cfg.JWTExpiry
@@ -177,6 +183,10 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 			common.WriteError(w, http.StatusBadRequest, "missing signature")
 			return
 		}
+		if !strings.HasPrefix(sig, "0x") {
+			common.WriteError(w, http.StatusBadRequest, "invalid signature")
+			return
+		}
 
 		// Fetch the nonce.
 		rsp := redisClient.GetDel(r.Context(), nonceKey(msg.GetAddress().String(), msg.GetNonce()))
@@ -191,16 +201,11 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 		}
 		nonce := rsp.Val()
 
-		// Verify the message signature.
-		if _, err := msg.Verify(sig /* We validate the domain below, since we allow multiple domains. */, nil, &nonce, nil /* nil uses time.Now() */); err != nil {
-			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
-			return
-		}
-
 		// Verify the domain.
 		domain := msg.GetDomain()
 		if domain == "" {
 			common.WriteError(w, http.StatusUnauthorized, "missing domain")
+			return
 		}
 		if !slices.Contains(cfg.SIWEDomains, domain) {
 			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE domain")
@@ -218,14 +223,65 @@ func SIWELoginHandler(redisClient *redis.Client, cfg *config.AuthConfig) func(w 
 			return
 		}
 
-		// Verify the Chain ID if set.
-		if cfg.SIWEChainID != 0 && msg.GetChainID() != cfg.SIWEChainID {
-			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE chain ID")
-			return
-		}
+		// Verify the version.
 		if cfg.SIWEVersion != "" && msg.GetVersion() != cfg.SIWEVersion {
 			common.WriteError(w, http.StatusUnauthorized, "invalid SIWE version")
 			return
+		}
+
+		// Verify the Chain ID.
+		if _, ok := chainclient.SupportedChainIDs[msg.GetChainID()]; !ok {
+			common.WriteError(w, http.StatusUnauthorized, "unsupported SIWE chain ID")
+			return
+		}
+
+		// Check if the signer address is a contract. If it is, we need to verify the signature
+		// by querying the contract (ERC-1271).
+		address := msg.GetAddress()
+		var code []byte
+		err = chainPool.GetWithRetry(r.Context(), msg.GetChainID(), func(chainClient *connection.RuntimeClient) error {
+			var err error
+			code, err = chainClient.Evm.Code(r.Context(), client.RoundLatest, address.Bytes())
+			return err
+		})
+		if err != nil {
+			slog.Error("failed to get code for address", "address", address, "error", err)
+			common.WriteError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		// Validate the signature.
+		switch len(code) {
+		case 0:
+			// The address is not a contract, we can verify the signature directly.
+			if _, err := msg.Verify(
+				sig,
+				nil, // We validate domain explicitly above.
+				&nonce,
+				nil, // time.Now()
+			); err != nil {
+				common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
+				return
+			}
+		default:
+			// The address is a contract, we need to verify the signature using ERC-1271.
+			hash := erc1271.Eip191Hash(body.Message)
+			sigBytes, err := hex.DecodeString(sig[2:])
+			if err != nil {
+				common.WriteError(w, http.StatusBadRequest, "invalid signature")
+				return
+			}
+			chainClient, err := chainPool.Get(msg.GetChainID())
+			if err != nil {
+				slog.Error("failed to get chain client", "error", err)
+				common.WriteError(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			if err := erc1271.CallVerify(r.Context(), chainClient.Evm, address, hash, sigBytes); err != nil {
+				slog.Error("failed to verify ERC-1271 signature", "address", address, "error", err)
+				common.WriteError(w, http.StatusUnauthorized, "invalid SIWE signature")
+				return
+			}
 		}
 
 		// Create a new session token.

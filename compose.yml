@@ -30,21 +30,21 @@ services:
       - "127.0.0.1:6379:6379"
 
   fakegcs:
-      image: fsouza/fake-gcs-server:latest
-      ports:
-        - "127.0.0.1:4443:4443"
-      entrypoint:
-        - /bin/sh
-        - -c
-        - |
-          # Initialize the bucket that's expected by the app.
-          mkdir -p /data/rofl-app-backend && \
-            exec /bin/fake-gcs-server \
-              -scheme=http \
-              -host=0.0.0.0 \
-              -port=4443 \
-              -public-host=fakegcs:4443 \
-              -data=/data
+    image: fsouza/fake-gcs-server:latest
+    ports:
+      - "127.0.0.1:4443:4443"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # Initialize the bucket that's expected by the app.
+        mkdir -p /data/rofl-app-backend && \
+          exec /bin/fake-gcs-server \
+            -scheme=http \
+            -host=0.0.0.0 \
+            -port=4443 \
+            -public-host=fakegcs:4443 \
+            -data=/data
 
   # TODO: Uncomment if you want to run prometheus as well.
   # prometheus:

@@ -25,6 +25,7 @@ import (
 
 	"github.com/oasisprotocol/rofl-app-backend/api/auth"
 	"github.com/oasisprotocol/rofl-app-backend/api/common"
+	"github.com/oasisprotocol/rofl-app-backend/chainclient"
 	"github.com/oasisprotocol/rofl-app-backend/config"
 	"github.com/oasisprotocol/rofl-app-backend/tasks"
 )
@@ -59,6 +60,12 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 		_ = redisClient.Close()
 	}()
 	prometheus.MustRegister(metrics.NewQueueMetricsCollector(asynqInspector))
+
+	// Setup chain client pool.
+	chainPool, err := chainclient.NewPool(ctx, s.logger)
+	if err != nil {
+		return fmt.Errorf("failed to initialize chain client pool: %w", err)
+	}
 
 	// Setup a GCS client (In production workload identity should be used, so no need to pass credentials).
 	gcsOpts := []option.ClientOption{}
@@ -117,7 +124,7 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 	r.Route("/auth", func(r chi.Router) {
 		r.Get("/nonce", auth.NonceHandler(redisClient))
 		// Issues a short-lived JWT for the user.
-		r.Post("/login", auth.SIWELoginHandler(redisClient, s.cfg.Auth))
+		r.Post("/login", auth.SIWELoginHandler(redisClient, chainPool, s.cfg.Auth))
 	})
 
 	// Authenticated routes.
