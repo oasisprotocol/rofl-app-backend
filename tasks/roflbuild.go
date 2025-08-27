@@ -10,11 +10,13 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-// RoflBuildTask is the name of the rofl build task.
-const RoflBuildTask = "rofl:build"
+const (
+	// RoflBuildTask is the name of the rofl build task.
+	RoflBuildTask = "rofl:build"
 
-// RoflBuildQueue is the name of the queue for the rofl build task.
-const RoflBuildQueue = "rofl_build"
+	// RoflBuildQueue is the name of the queue for the rofl build task.
+	RoflBuildQueue = "rofl_build"
+)
 
 // RoflBuildOptions returns the default options for the rofl build task.
 func RoflBuildOptions() []asynq.Option {

@@ -20,6 +20,9 @@ test-unit:
 	go test -v $(go list ./... | grep -v '/e2e')
 
 test-e2e:
+	go test -short -v ./e2e/...
+
+test-e2e-full:
 	go test -v ./e2e/...
 
 start:
@@ -82,9 +85,9 @@ release-build:
 	build \
 	test-unit \
 	test-e2e \
+	test-e2e-full \
 	start \
 	stop \
 	logs \
-	test-e2e \
 	fetch-git _version-bump _changelog changelog release-tag \
 	release-build

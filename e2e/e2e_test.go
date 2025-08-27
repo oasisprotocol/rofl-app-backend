@@ -69,6 +69,9 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("ROFL Build", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping slow ROFL Build test in short mode")
+		}
 		require := require.New(t)
 
 		// Setup the payload.
@@ -143,6 +146,117 @@ func TestE2E(t *testing.T) {
 			require.NotEmpty(result.ManifestHash, "no manifest hash in response body")
 			require.NotEmpty(result.OciReference, "no OCI reference in response body")
 			break
+		}
+	})
+
+	t.Run("ROFL Validate", func(t *testing.T) {
+		t.Run("ValidCase", func(t *testing.T) {
+			require := require.New(t)
+
+			// Setup the payload with valid data.
+			manifest, err := testFiles.ReadFile("testdata/rofl.yaml")
+			require.NoError(err)
+			compose, err := testFiles.ReadFile("testdata/compose.yaml")
+			require.NoError(err)
+			payload := map[string]string{
+				"manifest": string(manifest),
+				"compose":  string(compose),
+			}
+			buf := new(bytes.Buffer)
+			require.NoError(json.NewEncoder(buf).Encode(payload))
+
+			// Test validate a ROFL manifest.
+			resp := doRequest(t, client, http.MethodPost, backendURL+"/rofl/validate", &jwt, buf)
+			require.Equal(http.StatusOK, resp.StatusCode, "failed to submit a ROFL validate request")
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(err, "failed to read response body")
+			require.NoError(resp.Body.Close(), "failed to close response body")
+
+			var validateRes tasks.RoflValidateResult
+			require.NoError(json.Unmarshal(body, &validateRes), "failed to unmarshal response body")
+			require.True(validateRes.Valid, "validation should succeed for valid manifest")
+			require.Empty(validateRes.Err, "no error should be present for valid manifest")
+			require.NotEmpty(validateRes.Logs, "logs should be present")
+		})
+
+		// Invalid test cases.
+		invalidCases := []struct {
+			name        string
+			modifyFunc  func(string) string
+			description string
+		}{
+			{
+				name:        "InvalidMemoryField",
+				description: "invalid memory field type",
+				modifyFunc: func(manifest string) string {
+					return strings.Replace(manifest, "memory: 512", "memory: invalid-memory-value", 1)
+				},
+			},
+			{
+				name:        "MissingNameField",
+				description: "missing required name field",
+				modifyFunc: func(manifest string) string {
+					return strings.Replace(manifest, "name: rofl-app-backend-test-e2e\n", "", 1)
+				},
+			},
+			{
+				name:        "InvalidRepositoryURL",
+				description: "invalid repository URL format",
+				modifyFunc: func(manifest string) string {
+					return strings.Replace(manifest, "name: rofl-app-backend-test-e2e\n", "name: rofl-app-backend-test-e2e\nrepository: ht[tp://invalid\n", 1)
+				},
+			},
+			{
+				name:        "InvalidTEEType",
+				description: "invalid TEE type",
+				modifyFunc: func(manifest string) string {
+					return strings.Replace(manifest, "tee: tdx", "tee: ABC", 1)
+				},
+			},
+			{
+				name:        "MissingNetwork",
+				description: "missing required network field",
+				modifyFunc: func(manifest string) string {
+					return strings.Replace(manifest, "    network: testnet\n", "", 1)
+				},
+			},
+		}
+
+		for _, tc := range invalidCases {
+			t.Run(tc.name, func(t *testing.T) {
+				require := require.New(t)
+
+				// Start with valid files.
+				manifest, err := testFiles.ReadFile("testdata/rofl.yaml")
+				require.NoError(err)
+				compose, err := testFiles.ReadFile("testdata/compose.yaml")
+				require.NoError(err)
+
+				// Apply the specific modification for this test case.
+				invalidManifest := tc.modifyFunc(string(manifest))
+
+				payload := map[string]string{
+					"manifest": invalidManifest,
+					"compose":  string(compose),
+				}
+				buf := new(bytes.Buffer)
+				require.NoError(json.NewEncoder(buf).Encode(payload))
+
+				// Test validate the invalid ROFL manifest.
+				resp := doRequest(t, client, http.MethodPost, backendURL+"/rofl/validate", &jwt, buf)
+				require.Equal(http.StatusOK, resp.StatusCode, "failed to submit a ROFL validate request")
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(err, "failed to read response body")
+				require.NoError(resp.Body.Close(), "failed to close response body")
+
+				var validateRes tasks.RoflValidateResult
+				require.NoError(json.Unmarshal(body, &validateRes), "failed to unmarshal response body")
+				require.False(validateRes.Valid, "validation should fail for %s", tc.description)
+				require.NotEmpty(validateRes.Err, "error should be present for %s", tc.description)
+				require.NotEmpty(validateRes.Logs, "logs should be present for %s", tc.description)
+
+				t.Logf("Test case '%s' failed as expected with error: %s", tc.description, validateRes.Err)
+			})
 		}
 	})
 }
