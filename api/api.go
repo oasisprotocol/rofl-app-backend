@@ -216,6 +216,75 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 
 		// ROFL routes.
 		r.Route("/rofl", func(r chi.Router) {
+			r.Post("/validate", func(w http.ResponseWriter, r *http.Request) {
+				type validateRequest struct {
+					Manifest string `json:"manifest"`
+					Compose  string `json:"compose"`
+				}
+				req, err := common.DecodeJSON[validateRequest](r)
+				if err != nil {
+					s.logger.Error("failed to decode validate request", "err", err)
+					common.WriteError(w, http.StatusBadRequest, "invalid input")
+					return
+				}
+
+				addr, err := auth.EthAddress(r.Context())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusUnauthorized)
+					return
+				}
+
+				// Create a validate task.
+				task, err := tasks.NewRoflValidateTask(addr, []byte(req.Manifest), []byte(req.Compose))
+				if err != nil {
+					s.logger.Error("failed to create validate task", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+
+				// Enqueue and wait for the result (synchronous).
+				info, err := asynqClient.EnqueueContext(r.Context(), task, tasks.RoflValidateOptions()...)
+				if err != nil {
+					s.logger.Error("failed to enqueue validate task", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+
+				// Poll for the result until context is cancelled.
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-r.Context().Done():
+						common.WriteError(w, http.StatusRequestTimeout, "request cancelled")
+						return
+					case <-ticker.C:
+						// Check if results are available.
+						results, err := redisClient.Get(r.Context(), tasks.RoflValidateResultsKey(addr, info.ID)).Result()
+						if errors.Is(err, redis.Nil) {
+							// Results not ready yet, continue waiting.
+							continue
+						}
+						if err != nil {
+							s.logger.Error("failed to get validate results", "err", err)
+							common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+							return
+						}
+
+						// Results are available.
+						var result tasks.RoflValidateResult
+						if err := json.Unmarshal([]byte(results), &result); err != nil {
+							s.logger.Error("failed to unmarshal validate results", "err", err)
+							common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+							return
+						}
+						common.WriteJSON(w, http.StatusOK, result)
+						return
+					}
+				}
+			})
+
 			r.Post("/build", func(w http.ResponseWriter, r *http.Request) {
 				type buildRequest struct {
 					Manifest string `json:"manifest"`

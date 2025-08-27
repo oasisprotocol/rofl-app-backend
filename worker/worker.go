@@ -89,14 +89,17 @@ func (w *Worker) Run(ctx context.Context) error {
 		asynq.Config{
 			Concurrency: numWorkers,
 			Queues: map[string]int{
-				tasks.RoflBuildQueue: 1,
+				tasks.RoflBuildQueue:    1,
+				tasks.RoflValidateQueue: 3, // A bit higher priority for (fast) validate tasks.
 			},
 			Logger:          w.asynqLogger,
 			ShutdownTimeout: shutdownTimeout,
 		},
 	)
 	mux := asynq.NewServeMux()
-	mux.Handle(tasks.RoflBuildTask, newMetricsWrapper(tasks.RoflBuildQueue, &buildProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")}))
+	processor := &roflProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")}
+	mux.Handle(tasks.RoflBuildTask, newMetricsWrapper(tasks.RoflBuildQueue, processor))
+	mux.Handle(tasks.RoflValidateTask, newMetricsWrapper(tasks.RoflValidateQueue, processor))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -129,17 +132,29 @@ func NewWorker(cfg *config.WorkerConfig, logger *slog.Logger, logConfig config.L
 	}
 }
 
-// buildProcessor is the processor for the ROFL build task.
-type buildProcessor struct {
+// roflProcessor is the processor for ROFL tasks (build and validate).
+type roflProcessor struct {
 	cli    *oasiscli.Runner
 	redis  *redis.Client
 	logger *slog.Logger
 }
 
-var _ asynq.Handler = (*buildProcessor)(nil)
+var _ asynq.Handler = (*roflProcessor)(nil)
 
 // Implement the asynq.Handler interface.
-func (p *buildProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
+func (p *roflProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
+	switch t.Type() {
+	case tasks.RoflBuildTask:
+		return p.processBuildTaskWrapper(ctx, t)
+	case tasks.RoflValidateTask:
+		return p.processValidateTaskWrapper(ctx, t)
+	default:
+		p.logger.Error("unknown task type", "type", t.Type())
+		return ErrInternalError
+	}
+}
+
+func (p *roflProcessor) processBuildTaskWrapper(ctx context.Context, t *asynq.Task) error {
 	taskID := t.ResultWriter().TaskID()
 	p.logger.Debug("processing build task", "task_id", taskID)
 
@@ -190,32 +205,17 @@ func writeFile(path string, data []byte) error {
 	return nil
 }
 
-func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, payload tasks.RoflBuildPayload) tasks.RoflBuildResult {
+func (p *roflProcessor) processBuildTask(ctx context.Context, taskID string, payload tasks.RoflBuildPayload) tasks.RoflBuildResult {
 	var result tasks.RoflBuildResult
 
-	// Prepare the work dir for the commands.
-	workDir, err := p.cli.NewWorkDir(taskID)
+	// Setup work directory and files.
+	workDir, cleanup, err := p.setupWorkDir(taskID, payload.Manifest, payload.Compose)
 	if err != nil {
-		p.logger.Error("failed to create work directory", "error", err)
+		p.logger.Error("failed to setup work directory", "error", err)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	defer func() {
-		if err := os.RemoveAll(workDir); err != nil {
-			p.logger.Error("failed to remove work directory", "error", err, "work_dir", workDir)
-		}
-	}()
-
-	if err := writeFile(filepath.Join(workDir, "compose.yaml"), payload.Compose); err != nil {
-		p.logger.Error("failed to setup compose.yaml file", "error", err)
-		result.Err = ErrInternalError.Error()
-		return result
-	}
-	if err := writeFile(filepath.Join(workDir, "rofl.yaml"), payload.Manifest); err != nil {
-		p.logger.Error("failed to setup rofl.yaml file", "error", err)
-		result.Err = ErrInternalError.Error()
-		return result
-	}
+	defer cleanup()
 
 	// Run the build command.
 	buildResult, err := p.cli.Run(ctx, oasiscli.RunInput{
@@ -271,6 +271,98 @@ func (p *buildProcessor) processBuildTask(ctx context.Context, taskID string, pa
 	result.ManifestHash = pushResult.Push.ManifestHash
 	result.OciReference = pushResult.Push.OciReference
 	return result
+}
+
+func (p *roflProcessor) processValidateTaskWrapper(ctx context.Context, t *asynq.Task) error {
+	taskID := t.ResultWriter().TaskID()
+	p.logger.Debug("processing validate task", "task_id", taskID)
+
+	// Unmarshal the payload.
+	var payload tasks.RoflValidatePayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		p.logger.Error("failed to unmarshal validate task payload", "error", err)
+		return ErrInternalError
+	}
+
+	// Process the validate task.
+	result := p.processValidateTask(ctx, taskID, payload)
+
+	// Report the results.
+	resultsJSON, err := json.Marshal(result)
+	if err != nil {
+		p.logger.Error("failed to marshal validate result", "error", err)
+		return err
+	}
+	// Store results in Redis for the API to retrieve.
+	if err := p.redis.Set(ctx, tasks.RoflValidateResultsKey(payload.UserAddress, taskID), resultsJSON, 1*time.Minute).Err(); err != nil {
+		p.logger.Error("failed to save validate results to redis", "error", err)
+		return err
+	}
+
+	p.logger.Debug("validate task processed", "task_id", taskID)
+	return nil
+}
+
+func (p *roflProcessor) processValidateTask(ctx context.Context, taskID string, payload tasks.RoflValidatePayload) tasks.RoflValidateResult {
+	var result tasks.RoflValidateResult
+
+	// Setup work directory and files.
+	workDir, cleanup, err := p.setupWorkDir(taskID, payload.Manifest, payload.Compose)
+	if err != nil {
+		p.logger.Error("failed to setup work directory", "error", err)
+		result.Err = ErrInternalError.Error()
+		return result
+	}
+	defer cleanup()
+
+	// Run the validate command.
+	validateResult, err := p.cli.Run(ctx, oasiscli.RunInput{
+		Command: oasiscli.CommandValidate,
+		WorkDir: workDir,
+	})
+	if err != nil {
+		p.logger.Error("failed to run validate command", "error", err)
+		result.Err = ErrInternalError.Error()
+		return result
+	}
+	result.Logs = string(validateResult.Logs)
+
+	// Check if validation succeeded.
+	if validateResult.Err != nil {
+		p.logger.Debug("validate command failed", "error", validateResult.Err, "logs", validateResult.Logs)
+		result.Valid = false
+		result.Err = validateResult.Err.Error()
+	} else {
+		result.Valid = true
+	}
+
+	return result
+}
+
+// setupWorkDir creates a work directory and writes the manifest and compose files.
+// Returns the work directory path and a cleanup function.
+func (p *roflProcessor) setupWorkDir(taskID string, manifest, compose []byte) (string, func(), error) {
+	workDir, err := p.cli.NewWorkDir(taskID)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create work directory: %w", err)
+	}
+
+	cleanup := func() {
+		if err := os.RemoveAll(workDir); err != nil {
+			p.logger.Error("failed to remove work directory", "error", err, "work_dir", workDir)
+		}
+	}
+
+	if err := writeFile(filepath.Join(workDir, "compose.yaml"), compose); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to setup compose.yaml file: %w", err)
+	}
+	if err := writeFile(filepath.Join(workDir, "rofl.yaml"), manifest); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to setup rofl.yaml file: %w", err)
+	}
+
+	return workDir, cleanup, nil
 }
 
 var _ asynq.Logger = (*asynqLogger)(nil)
