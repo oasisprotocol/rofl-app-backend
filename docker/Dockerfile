@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 
 ARG OASIS_CLI_VERSION=0.15.2
@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -o rofl-app ./
 
 # Runner.
-FROM golang:1.24-bookworm AS app
+FROM golang:1.25-bookworm AS app
 
 # Install minimal runtime dependencies
 RUN apt-get update -qq && \
