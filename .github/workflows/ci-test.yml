@@ -40,6 +40,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+          cache: true
 
       - name: Build Go
         run: |
@@ -70,19 +71,21 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.25.x"
+          cache: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build images
-        uses: docker/bake-action@v6
+      - name: Build image
+        uses: docker/build-push-action@v6
         with:
-          source: .
+          context: .
+          file: docker/Dockerfile
           push: false
           load: true
-          set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+          tags: rofl-app-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Start containers
         run: |
