@@ -3,7 +3,7 @@ project_name: Rofl App Backend
 
 before:
   hooks:
-    - go mod tidy -compat=1.24
+    - go mod tidy -compat=1.25
 
 builds:
   - binary: rofl-app-backend
