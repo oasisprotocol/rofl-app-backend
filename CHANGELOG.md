@@ -1,3 +1,16 @@
+## 0.3.0 (2025-08-29)
+
+### Features
+
+- Add a rofl validate endpoint
+  ([#66](https://github.com/oasisprotocol/rofl-app-backend/issues/66))
+
+- docker: Bump oasis-cli to 0.15.2
+  ([#74](https://github.com/oasisprotocol/rofl-app-backend/issues/74))
+
+- Bump Go to version 1.25
+  ([#77](https://github.com/oasisprotocol/rofl-app-backend/issues/77))
+
 ## 0.2.0 (2025-08-26)
 
 ### Features
