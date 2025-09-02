@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -122,7 +123,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	c.SysProcAttr = getSysProcAttr()
 
 	var outputBuf bytes.Buffer
-	c.Stdout = &outputBuf
+	var stdoutBuf bytes.Buffer
+	c.Stdout = io.MultiWriter(&outputBuf, &stdoutBuf)
 	c.Stderr = &outputBuf
 
 	results := &CommandResult{}
@@ -164,8 +166,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	case CommandPush:
 		// The output should be a JSON object with the OCI digest and manifest hash.
 		var parsed map[string]string
-		if err := json.Unmarshal(results.Logs, &parsed); err != nil {
-			slog.Error("failed to parse push output", "error", err, "logs", results.Logs)
+		if err := json.Unmarshal(stdoutBuf.Bytes(), &parsed); err != nil {
+			slog.Error("failed to parse push output", "error", err, "stdout", stdoutBuf.Bytes(), "logs", results.Logs)
 			return nil, fmt.Errorf("failed to parse push output: %w", err)
 		}
 		if parsed["oci_reference"] == "" {
