@@ -178,6 +178,34 @@ func TestE2E(t *testing.T) {
 			require.Empty(validateRes.Err, "no error should be present for valid manifest")
 		})
 
+		t.Run("NoManifestCase", func(t *testing.T) {
+			require := require.New(t)
+
+			// Test validate without providing a manifest (should use dummy rofl.yaml)
+			compose, err := testFiles.ReadFile("testdata/compose.yaml")
+			require.NoError(err)
+			payload := map[string]string{
+				"manifest": "", // Empty manifest should trigger dummy usage
+				"compose":  string(compose),
+			}
+			buf := new(bytes.Buffer)
+			require.NoError(json.NewEncoder(buf).Encode(payload))
+
+			// Test validate with empty manifest.
+			resp := doRequest(t, client, http.MethodPost, backendURL+"/rofl/validate", &jwt, buf)
+			require.Equal(http.StatusOK, resp.StatusCode, "failed to submit a ROFL validate request with empty manifest")
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(err, "failed to read response body")
+			require.NoError(resp.Body.Close(), "failed to close response body")
+
+			var validateRes tasks.RoflValidateResult
+			require.NoError(json.Unmarshal(body, &validateRes), "failed to unmarshal response body")
+			require.True(validateRes.Valid, "validation should succeed when using dummy manifest")
+			require.Empty(validateRes.Err, "no error should be present when using dummy manifest")
+
+			t.Log("Successfully validated using dummy manifest when no manifest provided")
+		})
+
 		// Invalid test cases.
 		invalidCases := []struct {
 			name        string
