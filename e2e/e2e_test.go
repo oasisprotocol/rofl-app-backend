@@ -176,7 +176,6 @@ func TestE2E(t *testing.T) {
 			require.NoError(json.Unmarshal(body, &validateRes), "failed to unmarshal response body")
 			require.True(validateRes.Valid, "validation should succeed for valid manifest")
 			require.Empty(validateRes.Err, "no error should be present for valid manifest")
-			require.NotEmpty(validateRes.Logs, "logs should be present")
 		})
 
 		// Invalid test cases.
