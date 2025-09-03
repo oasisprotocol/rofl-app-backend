@@ -1,3 +1,16 @@
+## 0.4.0 (2025-09-03)
+
+### Features
+
+- api/rofl/validate: Support validation without `rofl.yaml`
+  ([#81](https://github.com/oasisprotocol/rofl-app-backend/issues/81))
+
+  In case no `rofl.yaml` is provided, a dummy manifest will be used for
+  the validation.
+
+- docker: Bump oasis-cli to 0.15.3
+  ([#82](https://github.com/oasisprotocol/rofl-app-backend/issues/82))
+
 ## 0.3.0 (2025-08-29)
 
 ### Features
