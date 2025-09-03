@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -45,8 +44,10 @@ type CommandResult struct {
 	// Validate is the result of the validate command.
 	Validate *CommandValidateResult `json:"validate,omitempty"`
 
-	// Logs are the outputted logs by the command.
-	Logs []byte `json:"logs"`
+	// Stdout is the standard output from the command.
+	Stdout []byte `json:"stdout"`
+	// Stderr is the error output from the command.
+	Stderr []byte `json:"stderr"`
 	// Err contains the error during execution of the command.
 	Err error `json:"err,omitempty"`
 }
@@ -122,10 +123,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	}
 	c.SysProcAttr = getSysProcAttr()
 
-	var outputBuf bytes.Buffer
 	var stdoutBuf bytes.Buffer
-	c.Stdout = io.MultiWriter(&outputBuf, &stdoutBuf)
-	c.Stderr = &outputBuf
+	var stderrBuf bytes.Buffer
+	c.Stdout = &stdoutBuf
+	c.Stderr = &stderrBuf
 
 	results := &CommandResult{}
 	if err := c.Start(); err != nil {
@@ -142,10 +143,11 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 			_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 		}
 		<-done
-		slog.Error("command timed out", "command", c.String(), "logs", outputBuf.String(), "error", ctx.Err())
+		slog.Error("command timed out", "command", c.String(), "stdout", stdoutBuf.String(), "stderr", stderrBuf.String(), "error", ctx.Err())
 		return nil, ctx.Err()
 	case err := <-done:
-		results.Logs = outputBuf.Bytes()
+		results.Stdout = stdoutBuf.Bytes()
+		results.Stderr = stderrBuf.Bytes()
 		if err != nil {
 			results.Err = fmt.Errorf("command '%s' failed: %w", c.String(), err)
 			return results, nil
@@ -166,8 +168,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	case CommandPush:
 		// The output should be a JSON object with the OCI digest and manifest hash.
 		var parsed map[string]string
-		if err := json.Unmarshal(stdoutBuf.Bytes(), &parsed); err != nil {
-			slog.Error("failed to parse push output", "error", err, "stdout", stdoutBuf.Bytes(), "logs", results.Logs)
+		if err := json.Unmarshal(results.Stdout, &parsed); err != nil {
+			slog.Error("failed to parse push output", "error", err, "stdout", results.Stdout, "stderr", results.Stderr)
 			return nil, fmt.Errorf("failed to parse push output: %w", err)
 		}
 		if parsed["oci_reference"] == "" {

@@ -135,13 +135,13 @@ func TestE2E(t *testing.T) {
 			if result.Err != "" {
 				// XXX: CI seems to slow to push the image to registry, so the build timeouts, don't fail the test in that case.
 				// Remove this in future, if the timeotus get adjusted.
-				if strings.Contains(result.Logs, "response status code 524") {
+				if strings.Contains(result.Stdout, "response status code 524") {
 					t.Log("build timed out, not failing the test")
 					return
 				}
 				require.FailNow(result.Err, "build failed", result.Err)
 			}
-			require.NotEmpty(result.Logs, "no logs in response body")
+			require.NotEmpty(result.Stdout, "no logs in response body")
 			require.NotEmpty(result.Manifest, "no manifest in response body")
 			require.NotEmpty(result.ManifestHash, "no manifest hash in response body")
 			require.NotEmpty(result.OciReference, "no OCI reference in response body")
@@ -280,7 +280,7 @@ func TestE2E(t *testing.T) {
 				require.NoError(json.Unmarshal(body, &validateRes), "failed to unmarshal response body")
 				require.False(validateRes.Valid, "validation should fail for %s", tc.description)
 				require.NotEmpty(validateRes.Err, "error should be present for %s", tc.description)
-				require.NotEmpty(validateRes.Logs, "logs should be present for %s", tc.description)
+				require.NotEmpty(validateRes.Stderr, "stderr should be present for %s", tc.description)
 
 				t.Logf("Test case '%s' failed as expected with error: %s", tc.description, validateRes.Err)
 			})
