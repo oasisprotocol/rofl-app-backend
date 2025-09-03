@@ -46,9 +46,10 @@ type RoflValidatePayload struct {
 
 // RoflValidateResult are the results of the rofl validate task.
 type RoflValidateResult struct {
-	Valid bool   `json:"valid"`
-	Logs  string `json:"logs"`
-	Err   string `json:"err"`
+	Valid  bool   `json:"valid"`
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
+	Err    string `json:"err"`
 }
 
 // RoflValidateResultsKey is the redis key for the results of the rofl validate task.

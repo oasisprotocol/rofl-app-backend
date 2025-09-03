@@ -227,17 +227,18 @@ func (p *roflProcessor) processBuildTask(ctx context.Context, taskID string, pay
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	result.Logs = string(buildResult.Logs)
+	result.Stdout = string(buildResult.Stdout)
+	result.Stderr = string(buildResult.Stderr)
 
 	// Propagate the build command error if it failed.
 	if buildResult.Err != nil {
-		p.logger.Error("build command failed", "error", buildResult.Err, "logs", buildResult.Logs)
+		p.logger.Error("build command failed", "error", buildResult.Err, "stdout", buildResult.Stdout, "stderr", buildResult.Stderr)
 		result.Err = buildResult.Err.Error()
 		return result
 	}
 
 	if buildResult.Build == nil {
-		p.logger.Error("build result is nil, but no error was returned", "logs", buildResult.Logs)
+		p.logger.Error("build result is nil, but no error was returned", "stdout", buildResult.Stdout, "stderr", buildResult.Stderr)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -252,17 +253,18 @@ func (p *roflProcessor) processBuildTask(ctx context.Context, taskID string, pay
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	result.Logs += "\n" + string(pushResult.Logs)
+	result.Stdout += "\n" + string(pushResult.Stdout)
+	result.Stderr += "\n" + string(pushResult.Stderr)
 
 	// Propagate the push command error if it failed.
 	if pushResult.Err != nil {
-		p.logger.Error("push command failed", "error", pushResult.Err, "logs", pushResult.Logs)
+		p.logger.Error("push command failed", "error", pushResult.Err, "stdout", pushResult.Stdout, "stderr", pushResult.Stderr)
 		result.Err = pushResult.Err.Error()
 		return result
 	}
 
 	if pushResult.Push == nil {
-		p.logger.Error("push result is nil, but no error was returned", "logs", pushResult.Logs)
+		p.logger.Error("push result is nil, but no error was returned", "stdout", pushResult.Stdout, "stderr", pushResult.Stderr)
 		result.Err = ErrInternalError.Error()
 		return result
 	}
@@ -325,11 +327,12 @@ func (p *roflProcessor) processValidateTask(ctx context.Context, taskID string, 
 		result.Err = ErrInternalError.Error()
 		return result
 	}
-	result.Logs = string(validateResult.Logs)
+	result.Stdout = string(validateResult.Stdout)
+	result.Stderr = string(validateResult.Stderr)
 
 	// Check if validation succeeded.
 	if validateResult.Err != nil {
-		p.logger.Debug("validate command failed", "error", validateResult.Err, "logs", validateResult.Logs)
+		p.logger.Debug("validate command failed", "error", validateResult.Err, "stdout", validateResult.Stdout, "stderr", validateResult.Stderr)
 		result.Valid = false
 		result.Err = validateResult.Err.Error()
 	} else {
