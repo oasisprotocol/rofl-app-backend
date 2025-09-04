@@ -63,7 +63,7 @@ jobs:
         if: always() && github.actor != 'dependabot[bot]'
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.25.x"
         # Always run this step so that all linting errors can be seen at once.
