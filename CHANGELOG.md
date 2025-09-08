@@ -1,3 +1,10 @@
+## 0.5.0 (2025-09-08)
+
+### Features
+
+- rofl: Split stdout and stderr for CLI commands
+  ([#85](https://github.com/oasisprotocol/rofl-app-backend/issues/85))
+
 ## 0.4.0 (2025-09-03)
 
 ### Features
