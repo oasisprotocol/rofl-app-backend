@@ -1,3 +1,7 @@
+## 0.4.1 (2025-09-08)
+
+No significant changes.
+
 ## 0.4.0 (2025-09-03)
 
 ### Features
