@@ -2,7 +2,7 @@
 FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 
-ARG OASIS_CLI_VERSION=0.15.3
+ARG OASIS_CLI_VERSION=0.16.0
 # ARG OASIS_CLI_BRANCH=master
 
 # Download or build oasis CLI.
