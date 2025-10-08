@@ -21,7 +21,7 @@ require (
 	github.com/spf13/cobra v1.10.1
 	github.com/spruceid/siwe-go v0.2.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.45.0
 	google.golang.org/api v0.252.0
 )
 
