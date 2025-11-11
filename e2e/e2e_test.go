@@ -149,6 +149,73 @@ func TestE2E(t *testing.T) {
 		}
 	})
 
+	t.Run("ROFL VerifyDeployments", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping slow ROFL VerifyDeployments test in short mode")
+		}
+		require := require.New(t)
+
+		payload := map[string]string{
+			"repository_url":  "https://github.com/ptrus/verisage.xyz",
+			"ref":             "master",
+			"deployment_name": "mainnet",
+		}
+		buf := new(bytes.Buffer)
+		require.NoError(json.NewEncoder(buf).Encode(payload))
+
+		resp := doRequest(t, client, http.MethodPost, backendURL+"/rofl/verify_deployments", &jwt, buf)
+		require.Equal(http.StatusOK, resp.StatusCode, "failed to submit verify deployments request")
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(err, "failed to read response body")
+		require.NoError(resp.Body.Close(), "failed to close response body")
+
+		var verifyReq struct {
+			TaskID string `json:"task_id"`
+		}
+		require.NoError(json.Unmarshal(body, &verifyReq), "failed to unmarshal response body")
+		require.NotEmpty(verifyReq.TaskID, "no task ID in response body")
+
+		start := time.Now()
+		timeout := time.After(5 * time.Minute)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				require.FailNow("verification timed out")
+			case <-ticker.C:
+				t.Logf("polling for verify deployments results: %s", verifyReq.TaskID)
+			}
+
+			resp := doRequest(t, client, http.MethodGet, backendURL+"/rofl/verify_deployments/"+verifyReq.TaskID+"/results", &jwt, nil)
+			switch resp.StatusCode {
+			case http.StatusAccepted:
+				continue
+			case http.StatusOK:
+			default:
+				require.FailNow("unexpected status code: %d", resp.StatusCode)
+			}
+
+			t.Log("verify task completed", "after", time.Since(start))
+
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(err, "failed to read response body")
+			_ = resp.Body.Close()
+
+			var result tasks.VerifyDeploymentsResult
+			require.NoError(json.Unmarshal(body, &result), "failed to unmarshal response body")
+			if result.Err != "" {
+				require.FailNow(result.Err, "verification failed")
+			}
+			require.True(result.Verified, "verification should succeed for verisage.xyz repository")
+			require.NotEmpty(result.CommitSHA, "commit SHA should be present in result")
+			require.Len(result.CommitSHA, 40, "commit SHA should be a valid 40-character hash")
+			t.Logf("Verification succeeded. CommitSHA: %s, Stdout: %d bytes, Stderr: %d bytes", result.CommitSHA, len(result.Stdout), len(result.Stderr))
+			return
+		}
+	})
+
 	t.Run("ROFL Validate", func(t *testing.T) {
 		t.Run("ValidCase", func(t *testing.T) {
 			require := require.New(t)

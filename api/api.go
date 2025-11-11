@@ -9,7 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -430,6 +432,105 @@ func (s *Server) Run(ctx context.Context) error { //nolint:gocyclo
 
 				common.WriteJSON(w, http.StatusOK, result)
 			})
+
+			r.Post("/verify_deployments", func(w http.ResponseWriter, r *http.Request) {
+				type verifyDeploymentsRequest struct {
+					RepositoryURL  string `json:"repository_url"`
+					Ref            string `json:"ref"`
+					DeploymentName string `json:"deployment_name"`
+				}
+				req, err := common.DecodeJSON[verifyDeploymentsRequest](r)
+				if err != nil {
+					s.logger.Error("failed to decode verify deployments request", "err", err)
+					common.WriteError(w, http.StatusBadRequest, "invalid input")
+					return
+				}
+
+				repoURL := strings.TrimSpace(req.RepositoryURL)
+				if err := validateGitHubRepoURL(repoURL); err != nil {
+					common.WriteError(w, http.StatusBadRequest, err.Error())
+					return
+				}
+				ref := strings.TrimSpace(req.Ref)
+				if ref == "" {
+					common.WriteError(w, http.StatusBadRequest, "ref is required")
+					return
+				}
+				if strings.ContainsAny(ref, " \t\r\n") {
+					common.WriteError(w, http.StatusBadRequest, "ref cannot contain whitespace")
+					return
+				}
+				deploymentName := strings.TrimSpace(req.DeploymentName)
+				if deploymentName == "" {
+					common.WriteError(w, http.StatusBadRequest, "deployment_name is required")
+					return
+				}
+
+				addr, err := auth.EthAddress(r.Context())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusUnauthorized)
+					return
+				}
+
+				task, err := tasks.NewVerifyDeploymentsTask(addr, repoURL, ref, deploymentName)
+				if err != nil {
+					s.logger.Error("failed to create verify deployments task", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+
+				info, err := asynqClient.EnqueueContext(r.Context(), task, tasks.VerifyDeploymentsOptions()...)
+				if err != nil {
+					if errors.Is(err, asynq.ErrDuplicateTask) {
+						common.WriteError(w, http.StatusConflict, "verification already in progress")
+						return
+					}
+					s.logger.Error("failed to enqueue verify deployments task", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+				common.WriteJSON(w, http.StatusOK, map[string]string{"task_id": info.ID})
+			})
+
+			r.Get("/verify_deployments/{task_id}/results", func(w http.ResponseWriter, r *http.Request) {
+				taskID := chi.URLParam(r, "task_id")
+				if taskID == "" {
+					common.WriteError(w, http.StatusBadRequest, "missing task_id")
+					return
+				}
+
+				addr, err := auth.EthAddress(r.Context())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusUnauthorized)
+					return
+				}
+
+				results, err := redisClient.Get(r.Context(), tasks.VerifyDeploymentsResultsKey(addr, taskID)).Result()
+				switch {
+				case errors.Is(err, redis.Nil):
+					if _, err := asynqInspector.GetTaskInfo(tasks.VerifyDeploymentsQueue, taskID); err != nil {
+						s.logger.Debug("failed to get verify deployments task info", "err", err)
+						common.WriteError(w, http.StatusNotFound, "task not found")
+						return
+					}
+					common.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "in_progress"})
+					return
+				case err != nil:
+					s.logger.Error("failed to get verify deployments task results", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				default:
+				}
+
+				var result tasks.VerifyDeploymentsResult
+				if err := json.Unmarshal([]byte(results), &result); err != nil {
+					s.logger.Error("failed to unmarshal verify deployments task results", "err", err)
+					common.WriteError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					return
+				}
+
+				common.WriteJSON(w, http.StatusOK, result)
+			})
 		})
 	})
 
@@ -476,6 +577,26 @@ func validateArtifactsID(id string) error {
 	}
 	if !artifactsValidID.MatchString(id) {
 		return fmt.Errorf("id contains invalid characters")
+	}
+	return nil
+}
+
+// validateGitHubRepoURL validates that the provided URL points to a GitHub repository.
+func validateGitHubRepoURL(repoURL string) error {
+	parsed, err := url.Parse(repoURL)
+	if err != nil {
+		return fmt.Errorf("invalid repository url")
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("repository url must use https")
+	}
+	if !strings.EqualFold(parsed.Host, "github.com") {
+		return fmt.Errorf("repository url must point to github.com")
+	}
+	path := strings.Trim(parsed.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		return fmt.Errorf("repository url must include organization and repository name")
 	}
 	return nil
 }

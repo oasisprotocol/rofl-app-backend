@@ -25,6 +25,8 @@ const (
 	CommandPush Command = "push"
 	// CommandValidate is the command to validate the manifest.
 	CommandValidate Command = "validate"
+	// CommandVerifyDeployment is the command to verify a deployment definition.
+	CommandVerifyDeployment Command = "verify_deployment"
 )
 
 // RunInput is the input for a command.
@@ -33,6 +35,8 @@ type RunInput struct {
 	Command Command
 	// WorkDir is the work directory for the command.
 	WorkDir string
+	// DeploymentName is required when running the verify deployment command.
+	DeploymentName string
 }
 
 // CommandResult is the result of running a command.
@@ -43,6 +47,8 @@ type CommandResult struct {
 	Push *CommandPushResult `json:"push,omitempty"`
 	// Validate is the result of the validate command.
 	Validate *CommandValidateResult `json:"validate,omitempty"`
+	// VerifyDeployment is the result of the verify deployment command.
+	VerifyDeployment *CommandVerifyDeploymentResult `json:"verify_deployment,omitempty"`
 
 	// Stdout is the standard output from the command.
 	Stdout []byte `json:"stdout"`
@@ -68,6 +74,9 @@ type CommandPushResult struct {
 
 // CommandValidateResult is the result of the validate command.
 type CommandValidateResult struct{}
+
+// CommandVerifyDeploymentResult is the result of the verify deployment command.
+type CommandVerifyDeploymentResult struct{}
 
 // Runner is a runner for the oasis CLI.
 type Runner struct {
@@ -109,6 +118,11 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 		args = []string{"rofl", "push", "--format", "json"}
 	case CommandValidate:
 		args = []string{"rofl", "build", "--only-validate"}
+	case CommandVerifyDeployment:
+		if input.DeploymentName == "" {
+			return nil, fmt.Errorf("deployment name is required for verify deployment command")
+		}
+		args = []string{"rofl", "build", "--verify", "--deployment", input.DeploymentName}
 	default:
 		return nil, fmt.Errorf("unsupported command: %s", input.Command)
 	}
@@ -184,6 +198,8 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 		}
 	case CommandValidate:
 		results.Validate = &CommandValidateResult{}
+	case CommandVerifyDeployment:
+		results.VerifyDeployment = &CommandVerifyDeploymentResult{}
 	}
 
 	return results, nil

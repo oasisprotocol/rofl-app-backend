@@ -55,6 +55,7 @@ linters:
             - github.com/spruceid/siwe-go
             - golang.org/x/net/context/ctxhttp
             - google.golang.org/api/option
+            - gopkg.in/yaml.v3
           deny:
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package

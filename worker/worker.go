@@ -2,16 +2,20 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+	"gopkg.in/yaml.v3"
 
 	"github.com/oasisprotocol/rofl-app-backend/config"
 	"github.com/oasisprotocol/rofl-app-backend/tasks"
@@ -89,8 +93,9 @@ func (w *Worker) Run(ctx context.Context) error {
 		asynq.Config{
 			Concurrency: numWorkers,
 			Queues: map[string]int{
-				tasks.RoflBuildQueue:    1,
-				tasks.RoflValidateQueue: 3, // A bit higher priority for (fast) validate tasks.
+				tasks.RoflBuildQueue:         2,
+				tasks.RoflValidateQueue:      3, // A bit higher priority for (fast) validate tasks.
+				tasks.VerifyDeploymentsQueue: 1, // Lowest priority, as it's only used by ROFL registry.
 			},
 			Logger:          w.asynqLogger,
 			ShutdownTimeout: shutdownTimeout,
@@ -100,6 +105,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	processor := &roflProcessor{cli: cli, redis: redisClient, logger: w.logger.With("component", "processor")}
 	mux.Handle(tasks.RoflBuildTask, newMetricsWrapper(tasks.RoflBuildQueue, processor))
 	mux.Handle(tasks.RoflValidateTask, newMetricsWrapper(tasks.RoflValidateQueue, processor))
+	mux.Handle(tasks.VerifyDeploymentsTask, newMetricsWrapper(tasks.VerifyDeploymentsQueue, processor))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -148,6 +154,8 @@ func (p *roflProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 		return p.processBuildTaskWrapper(ctx, t)
 	case tasks.RoflValidateTask:
 		return p.processValidateTaskWrapper(ctx, t)
+	case tasks.VerifyDeploymentsTask:
+		return p.processVerifyDeploymentsTaskWrapper(ctx, t)
 	default:
 		p.logger.Error("unknown task type", "type", t.Type())
 		return ErrInternalError
@@ -342,6 +350,115 @@ func (p *roflProcessor) processValidateTask(ctx context.Context, taskID string, 
 	return result
 }
 
+func (p *roflProcessor) processVerifyDeploymentsTaskWrapper(ctx context.Context, t *asynq.Task) error {
+	taskID := t.ResultWriter().TaskID()
+	p.logger.Debug("processing verify deployments task", "task_id", taskID)
+
+	var payload tasks.VerifyDeploymentsPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		p.logger.Error("failed to unmarshal verify deployments task payload", "error", err)
+		return ErrInternalError
+	}
+
+	result := p.processVerifyDeploymentsTask(ctx, taskID, payload)
+
+	resultsJSON, err := json.Marshal(result)
+	if err != nil {
+		p.logger.Error("failed to marshal verify deployments result", "error", err)
+		return err
+	}
+	if err := p.redis.Set(ctx, tasks.VerifyDeploymentsResultsKey(payload.UserAddress, taskID), resultsJSON, time.Hour).Err(); err != nil {
+		p.logger.Error("failed to save verify deployments results to redis", "error", err)
+		return err
+	}
+
+	p.logger.Debug("verify deployments task processed", "task_id", taskID)
+	return nil
+}
+
+func (p *roflProcessor) processVerifyDeploymentsTask(ctx context.Context, taskID string, payload tasks.VerifyDeploymentsPayload) tasks.VerifyDeploymentsResult {
+	var result tasks.VerifyDeploymentsResult
+	logs := newCommandLogs()
+	defer func() {
+		result.Stdout = logs.stdoutString()
+		result.Stderr = logs.stderrString()
+	}()
+
+	workDir, err := p.cli.NewWorkDir(taskID)
+	if err != nil {
+		p.logger.Error("failed to create verify work directory", "error", err)
+		result.Err = ErrInternalError.Error()
+		return result
+	}
+
+	cleanup := func() {
+		if err := os.RemoveAll(workDir); err != nil {
+			p.logger.Error("failed to remove verify work directory", "error", err, "work_dir", workDir)
+		}
+	}
+	defer cleanup()
+
+	repoDir := filepath.Join(workDir, "repo")
+
+	cloneStdout, cloneStderr, err := runCommand(ctx, workDir, "git", "clone", "--recursive", payload.RepositoryURL, repoDir)
+	logs.append("git clone", cloneStdout, cloneStderr)
+	if err != nil {
+		p.logger.Error("git clone failed", "error", err, "stdout", cloneStdout, "stderr", cloneStderr)
+		result.Err = fmt.Sprintf("git clone failed: %v", err)
+		return result
+	}
+
+	ref := strings.TrimSpace(payload.Ref)
+	if ref != "" {
+		checkoutStdout, checkoutStderr, err := runCommand(ctx, repoDir, "git", "checkout", ref)
+		logs.append("git checkout", checkoutStdout, checkoutStderr)
+		if err != nil {
+			p.logger.Error("git checkout failed", "error", err, "ref", ref, "stdout", checkoutStdout, "stderr", checkoutStderr)
+			result.Err = fmt.Sprintf("git checkout failed: %v", err)
+			return result
+		}
+	}
+
+	// Capture the current commit SHA.
+	commitSHAStdout, commitSHAStderr, err := runCommand(ctx, repoDir, "git", "rev-parse", "HEAD")
+	logs.append("git rev-parse HEAD", commitSHAStdout, commitSHAStderr)
+	if err != nil {
+		p.logger.Error("failed to get commit SHA", "error", err, "stdout", commitSHAStdout, "stderr", commitSHAStderr)
+		result.Err = fmt.Sprintf("failed to get commit SHA: %v", err)
+		return result
+	}
+	result.CommitSHA = strings.TrimSpace(commitSHAStdout)
+
+	// Remove the builder field from rofl.yaml if it exists.
+	// This is necessary because the verify command should not use a custom builder.
+	if err := removeBuilderFromManifest(filepath.Join(repoDir, "rofl.yaml")); err != nil {
+		p.logger.Error("failed to remove builder from rofl.yaml", "error", err)
+		result.Err = fmt.Sprintf("failed to remove builder from rofl.yaml: %v", err)
+		return result
+	}
+
+	verifyResult, err := p.cli.Run(ctx, oasiscli.RunInput{
+		Command:        oasiscli.CommandVerifyDeployment,
+		WorkDir:        repoDir,
+		DeploymentName: payload.DeploymentName,
+	})
+	if err != nil {
+		p.logger.Error("failed to run verify deployments command", "error", err)
+		result.Err = ErrInternalError.Error()
+		return result
+	}
+	logs.append("oasis rofl build --verify", string(verifyResult.Stdout), string(verifyResult.Stderr))
+
+	if verifyResult.Err != nil {
+		p.logger.Debug("verify deployments command failed", "error", verifyResult.Err, "stdout", verifyResult.Stdout, "stderr", verifyResult.Stderr)
+		result.Err = verifyResult.Err.Error()
+		return result
+	}
+
+	result.Verified = true
+	return result
+}
+
 // setupWorkDir creates a work directory and writes the manifest and compose files.
 // Returns the work directory path and a cleanup function.
 func (p *roflProcessor) setupWorkDir(taskID string, manifest, compose []byte) (string, func(), error) {
@@ -366,6 +483,84 @@ func (p *roflProcessor) setupWorkDir(taskID string, manifest, compose []byte) (s
 	}
 
 	return workDir, cleanup, nil
+}
+
+type commandLogs struct {
+	stdout strings.Builder
+	stderr strings.Builder
+}
+
+func newCommandLogs() *commandLogs {
+	return &commandLogs{}
+}
+
+func (l *commandLogs) append(label, stdout, stderr string) {
+	if stdout != "" {
+		if l.stdout.Len() > 0 {
+			l.stdout.WriteString("\n")
+		}
+		l.stdout.WriteString(fmt.Sprintf("[%s]\n%s", label, stdout))
+	}
+	if stderr != "" {
+		if l.stderr.Len() > 0 {
+			l.stderr.WriteString("\n")
+		}
+		l.stderr.WriteString(fmt.Sprintf("[%s]\n%s", label, stderr))
+	}
+}
+
+func (l *commandLogs) stdoutString() string {
+	return l.stdout.String()
+}
+
+func (l *commandLogs) stderrString() string {
+	return l.stderr.String()
+}
+
+func runCommand(ctx context.Context, dir, name string, args ...string) (string, string, error) {
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // Binary path is fixed.
+	cmd.Dir = dir
+
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	err := cmd.Run()
+	return stdoutBuf.String(), stderrBuf.String(), err
+}
+
+// removeBuilderFromManifest removes the builder field from the rofl.yaml manifest file.
+// This is necessary when verifying deployments to ensure we use the default builder.
+func removeBuilderFromManifest(manifestPath string) error {
+	// Read the manifest file.
+	data, err := os.ReadFile(manifestPath) //nolint:gosec // We control the file path.
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	// Parse the YAML.
+	var manifest map[string]interface{}
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("failed to unmarshal manifest: %w", err)
+	}
+
+	// Remove the builder field if it exists.
+	if _, exists := manifest["builder"]; exists {
+		delete(manifest, "builder")
+
+		// Write the updated manifest back to the file.
+		updatedData, err := yaml.Marshal(manifest)
+		if err != nil {
+			return fmt.Errorf("failed to marshal manifest: %w", err)
+		}
+
+		if err := os.WriteFile(manifestPath, updatedData, 0o600); err != nil {
+			return fmt.Errorf("failed to write manifest: %w", err)
+		}
+	}
+
+	return nil
 }
 
 var _ asynq.Logger = (*asynqLogger)(nil)
