@@ -2,7 +2,7 @@
 FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 
-ARG OASIS_CLI_VERSION=0.16.0
+ARG OASIS_CLI_VERSION=0.17.0
 # ARG OASIS_CLI_BRANCH=master
 
 # Download or build oasis CLI.
@@ -36,7 +36,7 @@ FROM golang:1.25-bookworm AS app
 RUN apt-get update -qq && \
     apt-get install -y apt-transport-https ca-certificates \
 	# Requirements for building OCI images.
-	squashfs-tools cryptsetup-bin qemu-utils
+	squashfs-tools cryptsetup-bin qemu-utils fakeroot
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/rofl-app /app/backend
