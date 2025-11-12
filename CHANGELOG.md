@@ -1,3 +1,10 @@
+## 0.6.0 (2025-11-12)
+
+### Features
+
+- tasks: Add support for verify deployment task
+  ([#118](https://github.com/oasisprotocol/rofl-app-backend/issues/118))
+
 ## 0.5.0 (2025-09-08)
 
 ### Features
