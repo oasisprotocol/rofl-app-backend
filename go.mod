@@ -3,7 +3,7 @@ module github.com/oasisprotocol/rofl-app-backend
 go 1.25
 
 require (
-	cloud.google.com/go/storage v1.57.1
+	cloud.google.com/go/storage v1.57.2
 	github.com/ethereum/go-ethereum v1.16.7
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
