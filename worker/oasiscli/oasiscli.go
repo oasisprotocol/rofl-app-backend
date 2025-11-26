@@ -122,7 +122,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 		if input.DeploymentName == "" {
 			return nil, fmt.Errorf("deployment name is required for verify deployment command")
 		}
-		args = []string{"rofl", "build", "--verify", "--deployment", input.DeploymentName}
+		args = []string{"rofl", "build", "--verify", "--deployment", input.DeploymentName, "--no-container"}
 	default:
 		return nil, fmt.Errorf("unsupported command: %s", input.Command)
 	}

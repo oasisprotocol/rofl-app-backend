@@ -15,7 +15,6 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
-	"gopkg.in/yaml.v3"
 
 	"github.com/oasisprotocol/rofl-app-backend/config"
 	"github.com/oasisprotocol/rofl-app-backend/tasks"
@@ -429,14 +428,6 @@ func (p *roflProcessor) processVerifyDeploymentsTask(ctx context.Context, taskID
 	}
 	result.CommitSHA = strings.TrimSpace(commitSHAStdout)
 
-	// Remove the builder field from rofl.yaml if it exists.
-	// This is necessary because the verify command should not use a custom builder.
-	if err := removeBuilderFromManifest(filepath.Join(repoDir, "rofl.yaml")); err != nil {
-		p.logger.Error("failed to remove builder from rofl.yaml", "error", err)
-		result.Err = fmt.Sprintf("failed to remove builder from rofl.yaml: %v", err)
-		return result
-	}
-
 	verifyResult, err := p.cli.Run(ctx, oasiscli.RunInput{
 		Command:        oasiscli.CommandVerifyDeployment,
 		WorkDir:        repoDir,
@@ -528,39 +519,6 @@ func runCommand(ctx context.Context, dir, name string, args ...string) (string, 
 
 	err := cmd.Run()
 	return stdoutBuf.String(), stderrBuf.String(), err
-}
-
-// removeBuilderFromManifest removes the builder field from the rofl.yaml manifest file.
-// This is necessary when verifying deployments to ensure we use the default builder.
-func removeBuilderFromManifest(manifestPath string) error {
-	// Read the manifest file.
-	data, err := os.ReadFile(manifestPath) //nolint:gosec // We control the file path.
-	if err != nil {
-		return fmt.Errorf("failed to read manifest: %w", err)
-	}
-
-	// Parse the YAML.
-	var manifest map[string]interface{}
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return fmt.Errorf("failed to unmarshal manifest: %w", err)
-	}
-
-	// Remove the builder field if it exists.
-	if _, exists := manifest["builder"]; exists {
-		delete(manifest, "builder")
-
-		// Write the updated manifest back to the file.
-		updatedData, err := yaml.Marshal(manifest)
-		if err != nil {
-			return fmt.Errorf("failed to marshal manifest: %w", err)
-		}
-
-		if err := os.WriteFile(manifestPath, updatedData, 0o600); err != nil {
-			return fmt.Errorf("failed to write manifest: %w", err)
-		}
-	}
-
-	return nil
 }
 
 var _ asynq.Logger = (*asynqLogger)(nil)
