@@ -17,13 +17,12 @@ require (
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/oasisprotocol/oasis-sdk/client-sdk/go v0.16.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/redis/go-redis/v9 v9.16.0
+	github.com/redis/go-redis/v9 v9.17.1
 	github.com/spf13/cobra v1.10.1
 	github.com/spruceid/siwe-go v0.2.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.47.0
 	google.golang.org/api v0.256.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -169,5 +168,6 @@ require (
 	google.golang.org/grpc/security/advancedtls v0.0.0-20221004221323-12db695f1648 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 )
