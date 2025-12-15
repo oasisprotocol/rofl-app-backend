@@ -104,7 +104,7 @@ jobs:
           docker compose logs | tee /tmp/docker-compose.log
         if: success() || failure()  # but not if job is manually cancelled
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: docker-compose.log
           path: |
