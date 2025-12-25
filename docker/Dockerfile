@@ -1,9 +1,9 @@
 # Build stage
-FROM golang:1.25-bookworm AS builder
+# Using trixie for GLIBC 2.38+ compatibility with oasis CLI pre-built binaries.
+FROM golang:1.25-trixie AS builder
 WORKDIR /app
 
-ARG OASIS_CLI_VERSION=0.17.1
-# ARG OASIS_CLI_BRANCH=master
+ARG OASIS_CLI_VERSION=0.18.1
 
 # Download or build oasis CLI.
 RUN if [ "x${OASIS_CLI_BRANCH}" != "x" ]; then \
@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -o rofl-app ./
 
 # Runner.
-FROM golang:1.25-bookworm AS app
+FROM golang:1.25-trixie AS app
 
 # Install minimal runtime dependencies
 RUN apt-get update -qq && \

@@ -113,7 +113,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (*CommandResult, error
 	var args []string
 	switch input.Command {
 	case CommandBuild:
-		args = []string{"rofl", "build"}
+		args = []string{"rofl", "build", "--no-container"}
 	case CommandPush:
 		args = []string{"rofl", "push", "--format", "json"}
 	case CommandValidate:
